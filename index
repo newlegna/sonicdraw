@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sonic Sketchpad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a; /* Slate 900 */
+            overflow: hidden;
+            touch-action: none; /* Prevent scrolling on mobile */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none; /* Let clicks pass through to canvas where needed */
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            margin-top: -6px;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #334155;
+            border-radius: 2px;
+        }
+        .glow-text {
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas -->
+    <canvas id="mainCanvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer" class="flex flex-col justify-between p-4">
+        
+        <!-- Top Bar -->
+        <div class="flex justify-between items-start interactive">
+            <div>
+                <h1 class="text-2xl font-bold text-white glow-text tracking-wider">SONIC<span class="text-sky-400">SKETCH</span></h1>
+                <p class="text-slate-400 text-xs">Draw to play. X = Pitch, Y = Filter.</p>
+            </div>
+            
+            <div class="flex gap-2">
+                <button id="clearBtn" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded border border-slate-600 text-sm transition">
+                    Clear
+                </button>
+                <button id="saveBtn" class="bg-sky-900 hover:bg-sky-700 text-white px-3 py-1 rounded border border-sky-600 text-sm transition">
+                    Save Art
+                </button>
+            </div>
+        </div>
+
+        <!-- Start Overlay (Required for Audio Context) -->
+        <div id="startOverlay" class="absolute inset-0 flex items-center justify-center bg-slate-900/90 interactive backdrop-blur-sm z-50">
+            <div class="text-center">
+                <div class="mb-6 text-6xl">🎨 🎵</div>
+                <h2 class="text-3xl text-white font-bold mb-4">Ready to Create?</h2>
+                <p class="text-slate-300 mb-8 max-w-md mx-auto">Touch or click and drag to draw. <br>Your movement creates the melody.</p>
+                <button id="startBtn" class="bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105">
+                    Start Experience
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="flex flex-col gap-4 mb-2 interactive max-w-md bg-slate-900/80 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
+            
+            <!-- Instrument Controls -->
+            <div class="flex items-center gap-4">
+                <div class="flex flex-col gap-1 flex-1">
+                    <label class="text-xs text-sky-300 uppercase tracking-wider font-semibold">Instrument</label>
+                    <div class="flex gap-1">
+                        <button class="wave-btn flex-1 bg-sky-600 text-white text-xs py-1 rounded active" data-wave="sine">Sine</button>
+                        <button class="wave-btn flex-1 bg-slate-700 text-slate-300 text-xs py-1 rounded" data-wave="square">Square</button>
+                        <button class="wave-btn flex-1 bg-slate-700 text-slate-300 text-xs py-1 rounded" data-wave="sawtooth">Saw</button>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col gap-1 w-24">
+                    <label class="text-xs text-sky-300 uppercase tracking-wider font-semibold">Delay</label>
+                    <input type="range" id="delaySlider" min="0" max="0.8" step="0.01" value="0.3">
+                </div>
+            </div>
+
+            <!-- Background Audio -->
+            <div class="flex items-center justify-between border-t border-slate-700 pt-3 mt-1">
+                <span class="text-xs text-slate-400">BACKING TRACK</span>
+                <button id="toggleBackingBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded border border-slate-600 transition">
+                    ▶ Play Ambient Drone
+                </button>
+            </div>
+
+            <!-- Color Palette -->
+            <div class="flex gap-2 justify-center mt-1">
+                <div class="color-swatch w-6 h-6 rounded-full bg-red-500 cursor-pointer border-2 border-white ring-2 ring-red-500" data-color="#ef4444"></div>
+                <div class="color-swatch w-6 h-6 rounded-full bg-amber-400 cursor-pointer border-2 border-transparent" data-color="#fbbf24"></div>
+                <div class="color-swatch w-6 h-6 rounded-full bg-green-500 cursor-pointer border-2 border-transparent" data-color="#22c55e"></div>
+                <div class="color-swatch w-6 h-6 rounded-full bg-cyan-400 cursor-pointer border-2 border-transparent" data-color="#22d3ee"></div>
+                <div class="color-swatch w-6 h-6 rounded-full bg-purple-500 cursor-pointer border-2 border-transparent" data-color="#a855f7"></div>
+                <div class="color-swatch w-6 h-6 rounded-full bg-pink-500 cursor-pointer border-2 border-transparent" data-color="#ec4899"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Audio Engine ---
+        const AudioEngine = {
+            ctx: null,
+            masterGain: null,
+            osc: null,
+            gainNode: null,
+            filterNode: null,
+            delayNode: null,
+            feedbackNode: null,
+            backingOsc: null,
+            backingGain: null,
+            isBackingPlaying: false,
+            scale: [], // Will hold frequency values
+            
+            init() {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                
+                // Master Output
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.6; // Safety ceiling
+                this.masterGain.connect(this.ctx.destination);
+
+                // Delay Effect (Echo)
+                this.delayNode = this.ctx.createDelay();
+                this.delayNode.delayTime.value = 0.3;
+                
+                this.feedbackNode = this.ctx.createGain();
+                this.feedbackNode.gain.value = 0.4;
+
+                // Routing Delay
+                this.delayNode.connect(this.feedbackNode);
+                this.feedbackNode.connect(this.delayNode);
+                this.delayNode.connect(this.masterGain);
+
+                // Generate Pentatonic Scale (C Minor Pentatonic roughly)
+                // C3 to C6
+                const baseFreq = 130.81; // C3
+                const ratios = [1, 1.2, 1.33, 1.5, 1.66, 2]; // Roughly pentatonic intervals
+                
+                for(let octave = 0; octave < 4; octave++) {
+                    ratios.forEach(r => {
+                        this.scale.push(baseFreq * Math.pow(2, octave) * r);
+                    });
+                }
+            },
+
+            startVoice(type = 'sine') {
+                if (!this.ctx) return;
+                
+                // Oscillator
+                this.osc = this.ctx.createOscillator();
+                this.osc.type = type;
+                
+                // Filter (Lowpass for "wah" effect)
+                this.filterNode = this.ctx.createBiquadFilter();
+                this.filterNode.type = 'lowpass';
+                this.filterNode.Q.value = 5; // Resonance
+
+                // Envelope Gain
+                this.gainNode = this.ctx.createGain();
+                this.gainNode.gain.setValueAtTime(0, this.ctx.currentTime);
+                this.gainNode.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.05); // Attack
+
+                // Chain: Osc -> Filter -> Gain -> Master & Delay
+                this.osc.connect(this.filterNode);
+                this.filterNode.connect(this.gainNode);
+                this.gainNode.connect(this.masterGain);
+                this.gainNode.connect(this.delayNode);
+
+                this.osc.start();
+            },
+
+            updateVoice(xRatio, yRatio) {
+                if (!this.osc) return;
+
+                // Map X to Pitch (Quantized to Scale)
+                const scaleIndex = Math.floor(xRatio * (this.scale.length - 1));
+                const freq = this.scale[scaleIndex];
+                
+                // Smooth frequency transition (portamento)
+                this.osc.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.02);
+
+                // Map Y to Filter Cutoff
+                // Invert Y so top is bright, bottom is dull
+                const minFilter = 200;
+                const maxFilter = 8000;
+                const filterFreq = minFilter + ((1 - yRatio) * (maxFilter - minFilter));
+                
+                this.filterNode.frequency.setTargetAtTime(filterFreq, this.ctx.currentTime, 0.05);
+            },
+
+            stopVoice() {
+                if (!this.gainNode) return;
+                // Release
+                this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
+                this.gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+                
+                const oldOsc = this.osc;
+                setTimeout(() => {
+                    if (oldOsc) oldOsc.stop();
+                }, 200);
+                
+                this.osc = null;
+            },
+
+            setDelayTime(val) {
+                if (this.delayNode) {
+                    this.delayNode.delayTime.setValueAtTime(val, this.ctx.currentTime);
+                }
+            },
+
+            toggleBacking() {
+                if (!this.ctx) return;
+
+                if (this.isBackingPlaying) {
+                    // Stop
+                    this.backingGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
+                    setTimeout(() => {
+                        this.backingOsc.stop();
+                        this.isBackingPlaying = false;
+                    }, 500);
+                } else {
+                    // Start Drone
+                    this.backingOsc = this.ctx.createOscillator();
+                    this.backingOsc.type = 'triangle';
+                    // C2
+                    this.backingOsc.frequency.value = 65.41; 
+
+                    this.backingGain = this.ctx.createGain();
+                    this.backingGain.gain.value = 0;
+                    
+                    // Lowpass for the drone so it's deep
+                    const lpf = this.ctx.createBiquadFilter();
+                    lpf.type = 'lowpass';
+                    lpf.frequency.value = 400;
+
+                    this.backingOsc.connect(lpf);
+                    lpf.connect(this.backingGain);
+                    this.backingGain.connect(this.masterGain);
+
+                    this.backingOsc.start();
+                    this.backingGain.gain.setTargetAtTime(0.2, this.ctx.currentTime, 1);
+                    this.isBackingPlaying = true;
+                }
+                return this.isBackingPlaying;
+            }
+        };
+
+        // --- 2. Canvas & Visuals ---
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // State
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentColor = '#ef4444'; // default red
+        let currentWaveform = 'sine';
+        let brushSize = 5;
+
+        // Particles for pizzazz
+        let particles = [];
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            // Redraw background on resize
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, width, height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 3. Interaction Logic ---
+
+        function getPos(e) {
+            if (e.touches) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        function start(e) {
+            e.preventDefault(); // prevent mouse emulation on touch
+            if (!AudioEngine.ctx) return; // Wait for initialization
+            AudioEngine.ctx.resume();
+
+            isDrawing = true;
+            const pos = getPos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+
+            // Start Audio
+            AudioEngine.startVoice(currentWaveform);
+            AudioEngine.updateVoice(pos.x / width, pos.y / height);
+
+            // Visual Start Dot
+            ctx.beginPath();
+            ctx.fillStyle = currentColor;
+            ctx.arc(pos.x, pos.y, brushSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function move(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            const pos = getPos(e);
+
+            // Audio Update
+            AudioEngine.updateVoice(pos.x / width, pos.y / height);
+
+            // Drawing Logic
+            ctx.lineWidth = brushSize;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = currentColor;
+            
+            // Add a glow effect
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = currentColor;
+
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+
+            // Reset shadow for performance
+            ctx.shadowBlur = 0;
+
+            // Spawn Particles occasionally
+            if (Math.random() > 0.8) {
+                particles.push({
+                    x: pos.x,
+                    y: pos.y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
+                    life: 1.0,
+                    color: currentColor
+                });
+            }
+
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function end() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            AudioEngine.stopVoice();
+        }
+
+        // --- 4. Animation Loop (Particles) ---
+        function animate() {
+            // Slight fade effect for trails? 
+            // Uncomment next 2 lines if you want drawing to disappear over time
+            // ctx.fillStyle = 'rgba(15, 23, 42, 0.05)';
+            // ctx.fillRect(0, 0, width, height);
+
+            // Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, Math.random() * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // --- 5. Event Listeners ---
+
+        // Canvas Events
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', end);
+        
+        canvas.addEventListener('touchstart', start, {passive: false});
+        canvas.addEventListener('touchmove', move, {passive: false});
+        window.addEventListener('touchend', end);
+
+        // UI Buttons
+        document.getElementById('startBtn').addEventListener('click', () => {
+            AudioEngine.init();
+            AudioEngine.ctx.resume().then(() => {
+                document.getElementById('startOverlay').style.display = 'none';
+            });
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, width, height);
+            particles = [];
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'sonic-sketch.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // Waveform Selector
+        const waveBtns = document.querySelectorAll('.wave-btn');
+        waveBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // UI update
+                waveBtns.forEach(b => {
+                    b.classList.remove('bg-sky-600', 'text-white', 'active');
+                    b.classList.add('bg-slate-700', 'text-slate-300');
+                });
+                e.target.classList.remove('bg-slate-700', 'text-slate-300');
+                e.target.classList.add('bg-sky-600', 'text-white', 'active');
+                
+                // Logic update
+                currentWaveform = e.target.dataset.wave;
+            });
+        });
+
+        // Color Picker
+        const swatches = document.querySelectorAll('.color-swatch');
+        swatches.forEach(swatch => {
+            swatch.addEventListener('click', (e) => {
+                swatches.forEach(s => {
+                    s.classList.remove('ring-2', 'ring-offset-1', 'border-white');
+                    s.classList.add('border-transparent');
+                    // Reset border color to match bg for others
+                    s.style.borderColor = 'transparent'; 
+                });
+                e.target.classList.remove('border-transparent');
+                e.target.classList.add('ring-2', 'border-white');
+                e.target.style.borderColor = 'white';
+                
+                // Set color
+                currentColor = e.target.dataset.color;
+            });
+        });
+
+        // Backing Track
+        const backingBtn = document.getElementById('toggleBackingBtn');
+        backingBtn.addEventListener('click', () => {
+            const isPlaying = AudioEngine.toggleBacking();
+            if (isPlaying) {
+                backingBtn.textContent = '⏸ Stop Ambient Drone';
+                backingBtn.classList.remove('bg-slate-800', 'text-slate-300');
+                backingBtn.classList.add('bg-indigo-600', 'text-white');
+            } else {
+                backingBtn.textContent = '▶ Play Ambient Drone';
+                backingBtn.classList.remove('bg-indigo-600', 'text-white');
+                backingBtn.classList.add('bg-slate-800', 'text-slate-300');
+            }
+        });
+
+        // Delay Slider
+        document.getElementById('delaySlider').addEventListener('input', (e) => {
+            AudioEngine.setDelayTime(parseFloat(e.target.value));
+        });
+
+    </script>
+</body>
+</html>

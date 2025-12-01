@@ -1,0 +1,12 @@
+{
+  "name": "sonicdraw",
+  "version": "1.0.0",
+  "description": "Interactive audio-visual drawing application",
+  "scripts": {
+    "start": "python3 -m http.server 8000 || python -m SimpleHTTPServer 8000",
+    "serve": "npx http-server -p 8000 -o"
+  },
+  "keywords": ["audio", "visual", "interactive", "drawing", "web-audio"],
+  "author": "",
+  "license": "MIT"
+}

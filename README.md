@@ -9,7 +9,7 @@ An interactive audio-visual drawing application. Draw with your mouse or touch t
 - **Music**: each flower plays its own music (peony in F major pentatonic, iris in D Lydian, camellia in the Japanese in-sen scale). The more open the flower, the fuller the sound and the more bell notes fall. Full bloom plays a flourish, waving your second hand rings wind chimes, and the petals pulse with the notes. The **Music on/off** button mutes it.
 - **Calibrate** measures your own pinch (2 steps, about 5 seconds) so the full range of your fingers opens the flower all the way.
 - **Play bloom** plays the opening animation from bud to full bloom.
-- The camera button shows or hides the camera view, and **Turn off gestures** switches to a slider.
+- The camera button shrinks the camera view to a small corner window (tap again to expand it), and **Turn off gestures** switches to a slider.
 - **Pinch hand** (on the camera view) switches which hand does the pinching.
 - Drag the flower to turn it.
 

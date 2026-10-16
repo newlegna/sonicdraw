@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Palm Lotus</title>
+<meta name="description" content="Open your hand to make a lotus bloom. Close it into a fist to fold the lotus back into a bud. Hand tracking by MediaPipe runs entirely in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Italiana&display=swap">
+<style>
+/* Layout: full-bleed night pond with the lotus at center; quiet UI pinned to the corners, bloom gauge along the bottom. */
+:root {
+  --night: #120b1d;
+  --dusk: #2b1a3d;
+  --petal: #f6c3d4;
+  --petal-deep: #d8457c;
+  --pollen: #f3c867;
+  --ink: #f6edf3;
+  --mist: #b4a2c0;
+  --glass: rgba(24, 14, 36, 0.66);
+  --line: rgba(246, 195, 212, 0.2);
+  --font-display: "Italiana", "Didot", "Bodoni 72", Georgia, serif;
+  --font-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: radial-gradient(120% 90% at 50% 36%, var(--dusk) 0%, var(--night) 64%) fixed, var(--night);
+  color: var(--ink);
+  font: 15px/1.5 var(--font-ui);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+[hidden] { display: none !important; }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.brand {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 22px);
+  left: calc(var(--gutter-l) + 8px);
+  max-width: min(360px, calc(100% - 48px));
+  pointer-events: none;
+}
+.brand h1 {
+  margin: 0;
+  font: 400 clamp(34px, 6vw, 52px)/1 var(--font-display);
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.brand p { margin: 8px 0 0; color: var(--mist); font-size: 14px; }
+
+/* Camera preview */
+.cam {
+  position: fixed;
+  left: calc(var(--gutter-l) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  margin: 0;
+  width: 224px;
+  display: grid;
+  gap: 8px;
+}
+.cam canvas {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  display: block;
+}
+.cam figcaption {
+  font-size: 12.5px;
+  color: var(--mist);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cam figcaption::before {
+  content: "";
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mist);
+  flex: none;
+}
+.cam.live figcaption { color: var(--ink); }
+.cam.live figcaption::before { background: var(--pollen); box-shadow: 0 0 8px var(--pollen); }
+
+/* Bloom gauge */
+.gauge {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  display: grid;
+  gap: 8px;
+}
+.gauge-read {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.gauge-read #stage { font: 400 26px/1 var(--font-display); letter-spacing: 0.03em; }
+.gauge-read #pct {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mist);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+.track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--petal-deep), var(--petal) 70%, var(--pollen));
+}
+.stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 15fr 30fr 35fr 20fr;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+  opacity: 0.75;
+}
+.stages li { white-space: nowrap; transition: color 0.3s, opacity 0.3s; }
+.stages li.on { color: var(--ink); opacity: 1; }
+.manual { display: grid; gap: 4px; padding-top: 6px; }
+.manual label { font-size: 12.5px; color: var(--mist); }
+.manual input { width: 100%; accent-color: var(--petal-deep); }
+.mode-row { display: flex; justify-content: center; padding-top: 4px; }
+
+button {
+  font: 600 15px/1 var(--font-ui);
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  padding: 14px 22px;
+  transition: transform 0.15s, background 0.2s, border-color 0.2s;
+}
+button:focus-visible, input:focus-visible { outline: 2px solid var(--pollen); outline-offset: 3px; }
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.6; cursor: progress; }
+.primary { background: var(--petal); color: var(--night); }
+.primary:hover { background: var(--ink); }
+.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+.secondary:hover { border-color: var(--petal); }
+.link {
+  background: none;
+  border: none;
+  color: var(--mist);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link:hover { color: var(--ink); }
+
+/* Hint shown when the camera can't see a hand */
+.hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, 150px);
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Intro card */
+.intro {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px var(--gutter-r) 24px var(--gutter-l);
+  background: linear-gradient(180deg, transparent 0%, rgba(18, 11, 29, 0.35) 100%);
+}
+.card {
+  width: min(420px, 100%);
+  padding: 28px;
+  border-radius: 22px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: grid;
+  gap: 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+.card h2 {
+  margin: 0;
+  font: 400 32px/1.1 var(--font-display);
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+.moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.moves li { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; }
+.glyph {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: rgba(246, 195, 212, 0.1);
+  font-size: 22px;
+}
+.moves strong { display: block; font-weight: 600; }
+.moves small { color: var(--mist); font-size: 13.5px; }
+.actions { display: grid; gap: 10px; }
+.note { margin: 0; font-size: 12.5px; color: var(--mist); }
+.error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(216, 69, 124, 0.16);
+  border: 1px solid rgba(216, 69, 124, 0.45);
+  font-size: 13.5px;
+}
+
+@media (max-width: 960px) {
+  .cam { left: auto; right: calc(var(--gutter-r) + 4px); top: calc(env(safe-area-inset-top, 0px) + 22px); bottom: auto; width: 132px; }
+  .cam figcaption { font-size: 11px; }
+}
+@media (max-width: 520px) {
+  .brand { left: calc(var(--gutter-l) + 2px); max-width: calc(100% - 180px); }
+  .brand p { font-size: 13px; }
+  .card { padding: 22px; }
+  .card h2 { font-size: 28px; }
+  .hint { white-space: normal; text-align: center; width: max-content; max-width: calc(100% - 32px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, .stages li { transition: none; }
+}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+
+<canvas id="scene" aria-label="A 3D lotus flower that opens and closes"></canvas>
+
+<header class="brand">
+  <h1>Palm Lotus</h1>
+  <p>Open your hand to bloom. Make a fist to close.</p>
+</header>
+
+<figure class="cam" id="cam" hidden>
+  <canvas id="preview" width="320" height="240" aria-label="Your camera, with the tracked hand drawn on top"></canvas>
+  <figcaption id="camStatus">Starting camera…</figcaption>
+</figure>
+
+<p class="hint" id="hint" hidden>Hold your hand up so the camera can see it</p>
+
+<section class="gauge" aria-label="Bloom">
+  <div class="gauge-read" aria-live="polite">
+    <span id="stage">Bud</span>
+    <span id="pct">0%</span>
+  </div>
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <ol class="stages" id="stages">
+    <li>Bud</li>
+    <li>Waking</li>
+    <li>Opening</li>
+    <li>Full bloom</li>
+  </ol>
+  <div class="manual" id="manual" hidden>
+    <label for="bloomSlider">Drag to open and close the lotus</label>
+    <input type="range" id="bloomSlider" min="0" max="100" value="35">
+  </div>
+  <div class="mode-row"><button class="link" id="switchMode" type="button" hidden>Use the slider instead</button></div>
+</section>
+
+<div class="intro" id="intro">
+  <div class="card" role="dialog" aria-labelledby="introTitle">
+    <h2 id="introTitle">Let your hand open the lotus</h2>
+    <ul class="moves">
+      <li><span class="glyph" aria-hidden="true">✋</span><span><strong>Open your hand</strong><small>The petals unfold into full bloom</small></span></li>
+      <li><span class="glyph" aria-hidden="true">✊</span><span><strong>Close it into a fist</strong><small>The lotus folds back into a bud</small></span></li>
+    </ul>
+    <p class="error" id="error" hidden></p>
+    <div class="actions">
+      <button class="primary" id="startBtn" type="button">Start camera</button>
+      <button class="secondary" id="sliderBtn" type="button">Use a slider instead</button>
+    </div>
+    <p class="note">Your video stays on this device. Nothing is recorded or uploaded.</p>
+  </div>
+</div>
+
+<video id="video" playsinline muted hidden></video>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ---------- Settings ----------
+const MP_VERSION = '0.10.14';
+const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+// How far each fingertip is from the wrist, compared with its knuckle.
+// About 1.0 for a fist, about 1.8 for a flat open hand.
+const FIST_RATIO = 1.05;
+const OPEN_RATIO = 1.72;
+
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (id) => document.getElementById(id);
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = (t) => t * t * (3 - 2 * t);
+const damp = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
+const rand = (a, b) => a + Math.random() * (b - a);
+
+// ---------- Renderer, camera, lights ----------
+const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const aspect = w / h;
+  // Step back far enough that the fully open flower fits across narrow screens.
+  const dist = Math.max(6.6, 2.0 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * aspect));
+  camera.position.set(0, dist * 0.5, dist);
+  camera.lookAt(0, aspect < 0.75 ? 0.1 : 0.3, 0);
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+scene.add(new THREE.HemisphereLight(0xffe3ee, 0x5a3352, 1.2));
+const key = new THREE.DirectionalLight(0xfff0e2, 2.3);
+key.position.set(3, 6, 4);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffe4ee, 1.1); // soft light from the viewer's side
+fill.position.set(0, 2, 8);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xb48cff, 1.7);
+rim.position.set(-4, 2.5, -5);
+scene.add(rim);
+const heart = new THREE.PointLight(0xffc56b, 0, 3.5, 1.4);
+heart.position.set(0, 0.45, 0);
+scene.add(heart);
+
+// ---------- Petals ----------
+function petalGeometry({ L, W, cup, bow, curl, colors }) {
+  const segU = 20, segV = 14;
+  const pos = [], col = [], idx = [];
+  const cBase = new THREE.Color(colors[0]);
+  const cMid = new THREE.Color(colors[1]);
+  const cTip = new THREE.Color(colors[2]);
+  const white = new THREE.Color('#fff8f2');
+  const c = new THREE.Color();
+  for (let i = 0; i <= segU; i++) {
+    const u = i / segU;
+    // Narrow at the base, widest a little past the middle, pointed tip.
+    const hw = W * (0.2 * (1 - u) + 0.8 * Math.pow(Math.sin(Math.PI * Math.pow(u, 1.16)), 0.9));
+    for (let j = 0; j <= segV; j++) {
+      const v = (j / segV) * 2 - 1;
+      const x = v * hw;
+      const y = u * L;
+      // Edges curl toward the flower's center; the middle bows outward like a spoon.
+      const z = -cup * v * v * hw + bow * Math.sin(Math.PI * u) * L + curl * u * u * u * L;
+      pos.push(x, y, z);
+
+      const t = Math.pow(u, 1.35);
+      if (t < 0.5) c.copy(cBase).lerp(cMid, t / 0.5);
+      else c.copy(cMid).lerp(cTip, (t - 0.5) / 0.5);
+      c.lerp(cTip, Math.pow(Math.abs(v), 3) * 0.3 * u);           // deeper edges
+      c.lerp(white, Math.pow(1 - Math.abs(v), 10) * 0.18 * (1 - u)); // pale midrib
+      col.push(c.r, c.g, c.b);
+    }
+  }
+  for (let i = 0; i < segU; i++) {
+    for (let j = 0; j < segV; j++) {
+      const a = i * (segV + 1) + j, b = a + segV + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// Outer to inner. `closed`/`open` are how far each petal leans out (radians).
+// `from`/`to` say when in the bloom each ring moves, so the outer petals open first.
+const RINGS = [
+  { n: 5, L: 0.92, W: 0.27, r: 0.17, y: 0.0, cup: 0.45, bow: 0.06, curl: 0.14, closed: 0.38, open: 1.95, from: 0.0, to: 0.5,
+    colors: ['#2c5e40', '#3f8257', '#79b57c'], sepal: true },
+  { n: 11, L: 1.42, W: 0.47, r: 0.2, y: 0.05, cup: 0.62, bow: 0.1, curl: 0.05, closed: 0.12, open: 1.36, from: 0.03, to: 0.72,
+    colors: ['#fbeee6', '#f2a7c3', '#cc3672'] },
+  { n: 9, L: 1.3, W: 0.44, r: 0.16, y: 0.09, cup: 0.6, bow: 0.1, curl: 0.03, closed: 0.04, open: 1.04, from: 0.15, to: 0.82,
+    colors: ['#fdf3ea', '#f5b6cd', '#d84a81'] },
+  { n: 7, L: 1.14, W: 0.4, r: 0.12, y: 0.13, cup: 0.6, bow: 0.1, curl: 0.0, closed: -0.03, open: 0.74, from: 0.27, to: 0.92,
+    colors: ['#fff7ee', '#f8c6d8', '#e0629a'] },
+  { n: 5, L: 0.96, W: 0.34, r: 0.08, y: 0.17, cup: 0.6, bow: 0.1, curl: 0.0, closed: -0.09, open: 0.45, from: 0.38, to: 1.0,
+    colors: ['#fffaf2', '#fbd5e2', '#e97ea8'] },
+];
+
+const flower = new THREE.Group();
+scene.add(flower);
+
+const petalMaterial = new THREE.MeshPhysicalMaterial({
+  vertexColors: true, side: THREE.DoubleSide, roughness: 0.52, metalness: 0,
+  sheen: 0.7, sheenRoughness: 0.45, sheenColor: new THREE.Color('#ffd6e4'),
+});
+const sepalMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.7 });
+
+const rings = RINGS.map((cfg, ri) => {
+  const geo = petalGeometry(cfg);
+  const petals = [];
+  const offset = (ri % 2) * (Math.PI / cfg.n) + rand(-0.1, 0.1);
+  for (let k = 0; k < cfg.n; k++) {
+    const holder = new THREE.Group();
+    holder.rotation.y = offset + (k / cfg.n) * Math.PI * 2;
+    const pivot = new THREE.Group();
+    const alt = k % 2; // alternate petals sit slightly outside their neighbours, like shingles
+    pivot.position.set(0, cfg.y, cfg.r + alt * 0.025);
+    const mesh = new THREE.Mesh(geo, cfg.sepal ? sepalMaterial : petalMaterial);
+    mesh.rotation.z = rand(-0.06, 0.06);
+    pivot.add(mesh);
+    holder.add(pivot);
+    flower.add(holder);
+    petals.push({ pivot, alt, size: rand(0.95, 1.05), jitter: rand(-0.06, 0.06), phase: rand(0, Math.PI * 2) });
+  }
+  return { cfg, petals };
+});
+
+// ---------- Heart of the flower: seed pod and stamens ----------
+const greenMat = new THREE.MeshStandardMaterial({ color: '#3d7a52', roughness: 0.65 });
+const receptacle = new THREE.Mesh(new THREE.SphereGeometry(0.25, 28, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), greenMat);
+receptacle.scale.set(1, 0.55, 1);
+receptacle.position.y = 0.06;
+flower.add(receptacle);
+
+const pod = new THREE.Group();
+pod.position.y = 0.17;
+flower.add(pod);
+const podMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.15, 0.09, 0.15, 40),
+  [
+    new THREE.MeshStandardMaterial({ color: '#c3c25a', roughness: 0.6 }),
+    new THREE.MeshStandardMaterial({ color: '#e9d96e', roughness: 0.5, emissive: '#5a4a00', emissiveIntensity: 0.35 }),
+    new THREE.MeshStandardMaterial({ color: '#8d9a46', roughness: 0.7 }),
+  ]
+);
+podMesh.position.y = 0.075;
+pod.add(podMesh);
+const seeds = new THREE.InstancedMesh(new THREE.SphereGeometry(0.02, 10, 6), new THREE.MeshStandardMaterial({ color: '#7b8a35', roughness: 0.5 }), 10);
+{
+  const m = new THREE.Matrix4();
+  const spots = [[0, 0]];
+  for (let i = 0; i < 9; i++) spots.push([Math.cos(i / 9 * Math.PI * 2) * 0.09, Math.sin(i / 9 * Math.PI * 2) * 0.09]);
+  spots.forEach(([x, z], i) => { m.makeScale(1, 0.55, 1).setPosition(x, 0.152, z); seeds.setMatrixAt(i, m); });
+}
+pod.add(seeds);
+
+const STAMENS = 56;
+const filamentGeo = new THREE.CylinderGeometry(0.005, 0.007, 1, 5);
+filamentGeo.translate(0, 0.5, 0);
+const antherGeo = new THREE.SphereGeometry(0.018, 8, 6);
+antherGeo.scale(1, 1.9, 1);
+const filaments = new THREE.InstancedMesh(filamentGeo, new THREE.MeshStandardMaterial({ color: '#f6df92', roughness: 0.6 }), STAMENS);
+const anthers = new THREE.InstancedMesh(antherGeo, new THREE.MeshStandardMaterial({ color: '#f2b53a', roughness: 0.45, emissive: '#7a4a00', emissiveIntensity: 0.45 }), STAMENS);
+flower.add(filaments, anthers);
+const stamenData = Array.from({ length: STAMENS }, (_, i) => ({
+  a: (i / STAMENS) * Math.PI * 2 + rand(-0.05, 0.05),
+  r: rand(0.13, 0.17),
+  len: rand(0.85, 1.15),
+  lean: rand(0, 0.3),
+}));
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+function updateStamens(p) {
+  for (let i = 0; i < STAMENS; i++) {
+    const s = stamenData[i];
+    const len = (0.1 + 0.22 * p) * s.len;
+    const tilt = 0.2 + (0.7 + s.lean) * p;
+    _e.set(tilt, s.a, 0, 'YXZ');
+    _q.setFromEuler(_e);
+    _p.set(Math.sin(s.a) * s.r, 0.16, Math.cos(s.a) * s.r);
+    _m.compose(_p, _q, _s.set(1, len, 1));
+    filaments.setMatrixAt(i, _m);
+    _p.x += Math.sin(s.a) * Math.sin(tilt) * len;
+    _p.y += Math.cos(tilt) * len;
+    _p.z += Math.cos(s.a) * Math.sin(tilt) * len;
+    _m.compose(_p, _q, _s.set(1, 1, 1));
+    anthers.setMatrixAt(i, _m);
+  }
+  filaments.instanceMatrix.needsUpdate = true;
+  anthers.instanceMatrix.needsUpdate = true;
+}
+
+// Stem down to the water
+const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1, 12), greenMat);
+stem.scale.y = 0.95;
+stem.position.y = -0.42;
+flower.add(stem);
+
+// ---------- Soft textures made on the fly ----------
+function radialTexture(stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  stops.forEach(([at, color]) => grad.addColorStop(at, color));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Warm glow from inside the flower, stronger as it opens
+const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: radialTexture([[0, 'rgba(255,214,140,1)'], [0.35, 'rgba(255,170,190,0.45)'], [1, 'rgba(255,150,190,0)']]),
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+}));
+glow.position.y = 0.4;
+flower.add(glow);
+
+// ---------- Pond ----------
+const WATER_Y = -0.9;
+const water = new THREE.Mesh(
+  new THREE.CircleGeometry(7, 96),
+  new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uBloom: { value: 0 } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform float uTime; uniform float uBloom; varying vec2 vUv;
+      void main(){
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length(p);
+        float ring = pow(0.5 + 0.5 * sin(r * 46.0 - uTime * 1.4), 14.0);
+        ring *= smoothstep(0.9, 0.05, r) * smoothstep(0.02, 0.08, r);
+        vec3 col = mix(vec3(0.11, 0.07, 0.18), vec3(0.06, 0.035, 0.1), smoothstep(0.0, 0.8, r));
+        col += ring * vec3(0.62, 0.42, 0.68) * (0.1 + 0.3 * uBloom);
+        col += vec3(1.0, 0.62, 0.74) * 0.22 * uBloom * exp(-r * r * 60.0);
+        float a = smoothstep(1.0, 0.45, r);
+        gl_FragColor = vec4(col, a);
+      }`,
+  })
+);
+water.rotation.x = -Math.PI / 2;
+water.position.y = WATER_Y;
+scene.add(water);
+
+const padMat = new THREE.MeshStandardMaterial({ color: '#2b5c43', roughness: 0.55, side: THREE.DoubleSide, emissive: '#0b2117', emissiveIntensity: 0.6 });
+const pads = [[2.1, 0.6, 0.62, 0.3], [-2.25, -0.5, 0.78, 2.1], [2.75, 1.9, 0.45, 4.2], [1.3, -1.9, 0.5, 5.4]].map(([x, z, size, rot], i) => {
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(size, 48, 0.22, Math.PI * 2 - 0.44), padMat);
+  pad.rotation.set(-Math.PI / 2, 0, rot);
+  pad.position.set(x, WATER_Y + 0.01, z);
+  scene.add(pad);
+  return { pad, phase: i * 1.7 };
+});
+
+// ---------- Floating pollen ----------
+const POLLEN = 240;
+const pollenPos = new Float32Array(POLLEN * 3);
+const pollenSeed = [];
+for (let i = 0; i < POLLEN; i++) {
+  const a = rand(0, Math.PI * 2), r = Math.sqrt(Math.random()) * 3.2;
+  pollenPos.set([Math.cos(a) * r, rand(WATER_Y, 3.2), Math.sin(a) * r], i * 3);
+  pollenSeed.push({ speed: rand(0.5, 1.5), phase: rand(0, 6.28) });
+}
+const pollenGeo = new THREE.BufferGeometry();
+pollenGeo.setAttribute('position', new THREE.BufferAttribute(pollenPos, 3));
+const pollenMat = new THREE.PointsMaterial({
+  size: 0.06, map: radialTexture([[0, 'rgba(255,230,160,1)'], [0.4, 'rgba(255,210,130,0.5)'], [1, 'rgba(255,200,120,0)']]),
+  color: '#ffe2a0', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.3,
+});
+scene.add(new THREE.Points(pollenGeo, pollenMat));
+
+function updatePollen(dt, t, b) {
+  const rise = (calm ? 0.03 : 0.08) + 0.14 * b;
+  for (let i = 0; i < POLLEN; i++) {
+    const s = pollenSeed[i];
+    let y = pollenPos[i * 3 + 1] + dt * rise * s.speed;
+    if (y > 3.2) y = WATER_Y + 0.05;
+    pollenPos[i * 3 + 1] = y;
+    pollenPos[i * 3] += Math.sin(t * 0.6 + s.phase) * dt * 0.05;
+  }
+  pollenGeo.attributes.position.needsUpdate = true;
+  pollenMat.opacity = 0.18 + 0.7 * b;
+}
+
+// ---------- Put the bloom amount (0 = bud, 1 = full bloom) onto the flower ----------
+function applyBloom(b, t) {
+  for (const { cfg, petals } of rings) {
+    const p = ease(clamp01((b - cfg.from) / (cfg.to - cfg.from)));
+    for (const petal of petals) {
+      const breathe = calm ? 0 : Math.sin(t * 1.2 + petal.phase) * 0.012;
+      petal.pivot.rotation.x = lerp(cfg.closed, cfg.open, p) + petal.jitter * (0.3 + 0.7 * p) + petal.alt * 0.025 + breathe;
+      petal.pivot.scale.setScalar(petal.size * (0.93 + 0.09 * p));
+    }
+  }
+  const core = ease(clamp01((b - 0.35) / 0.65));
+  pod.scale.setScalar(0.6 + 0.4 * core);
+  updateStamens(core);
+  heart.intensity = 3.2 * core;
+  glow.material.opacity = 0.75 * core;
+  glow.scale.setScalar(0.8 + 2.6 * core);
+  water.material.uniforms.uBloom.value = b;
+}
+
+// ---------- Hand tracking (MediaPipe Hand Landmarker) ----------
+const video = $('video');
+const preview = $('preview');
+const pctx = preview.getContext('2d');
+let landmarker = null;
+let landmarkerLoading = null;
+let stream = null;
+let lastVideoTime = -1;
+let lastSeen = 0;
+let lastRatio = null;
+
+function loadLandmarker() {
+  if (!landmarkerLoading) {
+    landmarkerLoading = (async () => {
+      const { FilesetResolver, HandLandmarker } = await import(`${MP_BASE}/vision_bundle.mjs`);
+      const fileset = await FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+      const options = (delegate) => ({
+        baseOptions: { modelAssetPath: HAND_MODEL, delegate },
+        runningMode: 'VIDEO',
+        numHands: 1,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      try {
+        return await HandLandmarker.createFromOptions(fileset, options('GPU'));
+      } catch (err) {
+        console.warn('GPU hand tracking unavailable, using CPU instead.', err);
+        return await HandLandmarker.createFromOptions(fileset, options('CPU'));
+      }
+    })();
+    landmarkerLoading.catch(() => { landmarkerLoading = null; });
+  }
+  return landmarkerLoading;
+}
+
+const FINGERS = [[5, 8], [9, 12], [13, 16], [17, 20]]; // [knuckle, fingertip] for index, middle, ring, pinky
+function handOpenness(world, image) {
+  const pts = world && world.length === 21
+    ? world
+    : image.map((p) => ({ x: p.x * video.videoWidth, y: p.y * video.videoHeight, z: 0 }));
+  const d = (a, b) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y, pts[a].z - pts[b].z);
+  let sum = 0;
+  for (const [knuckle, tip] of FINGERS) sum += d(0, tip) / Math.max(d(0, knuckle), 1e-6);
+  const ratio = sum / FINGERS.length;
+  return { ratio, open: clamp01((ratio - FIST_RATIO) / (OPEN_RATIO - FIST_RATIO)) };
+}
+
+const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
+function drawPreview(hand, open) {
+  const w = preview.width, h = preview.height;
+  pctx.save();
+  pctx.translate(w, 0);
+  pctx.scale(-1, 1); // mirror, so it behaves like a mirror
+  pctx.drawImage(video, 0, 0, w, h);
+  pctx.restore();
+  pctx.fillStyle = 'rgba(18, 11, 29, 0.25)';
+  pctx.fillRect(0, 0, w, h);
+  if (!hand) return;
+  const P = hand.map((p) => [(1 - p.x) * w, p.y * h]);
+  pctx.lineWidth = 2.5;
+  pctx.lineCap = 'round';
+  pctx.strokeStyle = `rgba(246, 195, 212, ${0.55 + 0.45 * open})`;
+  pctx.beginPath();
+  for (const [a, b] of BONES) { pctx.moveTo(...P[a]); pctx.lineTo(...P[b]); }
+  pctx.stroke();
+  pctx.fillStyle = '#f3c867';
+  for (const i of [4, 8, 12, 16, 20]) { pctx.beginPath(); pctx.arc(P[i][0], P[i][1], 4, 0, Math.PI * 2); pctx.fill(); }
+}
+
+function trackHand(now) {
+  if (!landmarker || video.readyState < 2 || video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  if (preview.width !== Math.round(240 * video.videoWidth / video.videoHeight) && video.videoHeight) {
+    preview.width = Math.round(240 * video.videoWidth / video.videoHeight);
+    preview.height = 240;
+  }
+  let result;
+  try { result = landmarker.detectForVideo(video, now); } catch (err) { console.warn(err); return; }
+  const hand = result.landmarks && result.landmarks[0];
+  if (hand) {
+    const { ratio, open } = handOpenness(result.worldLandmarks && result.worldLandmarks[0], hand);
+    lastRatio = ratio;
+    target = open;
+    yawTarget = ((1 - hand[9].x) - 0.5) * 0.9; // move your hand sideways to turn the flower a little
+    lastSeen = now;
+    drawPreview(hand, open);
+  } else {
+    drawPreview(null, 0);
+  }
+}
+
+// ---------- Modes and UI ----------
+let mode = 'demo'; // 'demo' (gentle preview), 'camera' (your hand), 'manual' (slider)
+let target = 0.35, bloom = 0.0, yaw = 0, yawTarget = 0, spin = 0;
+
+const intro = $('intro'), errorBox = $('error'), startBtn = $('startBtn'), sliderBtn = $('sliderBtn');
+const cam = $('cam'), camStatus = $('camStatus'), hint = $('hint');
+const manual = $('manual'), slider = $('bloomSlider'), switchMode = $('switchMode');
+
+function showError(message) {
+  errorBox.textContent = message;
+  errorBox.hidden = false;
+  startBtn.disabled = false;
+  startBtn.textContent = 'Try the camera again';
+  intro.hidden = false;
+  cam.hidden = true;
+  hint.hidden = true;
+  if (mode === 'camera') mode = 'demo';
+}
+
+function stopCamera() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = null;
+  video.srcObject = null;
+  cam.hidden = true;
+  hint.hidden = true;
+}
+
+async function startCamera() {
+  errorBox.hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showError('This browser can’t use the camera here. Open the page in Chrome, Edge, Firefox or Safari, from an https:// address or a file on your computer.');
+    return;
+  }
+  startBtn.disabled = true;
+  startBtn.textContent = 'Starting camera…';
+  const trackerReady = loadLandmarker();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+  } catch (err) {
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      showError('The camera is blocked for this page. Click the camera icon in your browser’s address bar, choose Allow, then press the button below.');
+    } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+      showError('No camera was found. Plug one in and try again, or use the slider.');
+    } else if (err.name === 'NotReadableError') {
+      showError('Another app is using the camera. Close it (for example a video call) and try again.');
+    } else {
+      showError(`The camera didn’t start (${err.name}). Try again, or use the slider.`);
+    }
+    return;
+  }
+  video.srcObject = stream;
+  try { await video.play(); } catch (err) { /* autoplay with muted video normally succeeds */ }
+
+  startBtn.textContent = 'Loading hand tracker…';
+  try {
+    landmarker = await trackerReady;
+  } catch (err) {
+    console.error(err);
+    stopCamera();
+    showError('The hand tracker didn’t load. Check your internet connection and try again.');
+    return;
+  }
+
+  mode = 'camera';
+  lastSeen = performance.now();
+  intro.hidden = true;
+  manual.hidden = true;
+  cam.hidden = false;
+  switchMode.hidden = false;
+  switchMode.textContent = 'Use the slider instead';
+  startBtn.disabled = false;
+  startBtn.textContent = 'Start camera';
+}
+
+function startManual() {
+  stopCamera();
+  mode = 'manual';
+  target = slider.value / 100;
+  intro.hidden = true;
+  manual.hidden = false;
+  switchMode.hidden = false;
+  switchMode.textContent = 'Use my hand instead';
+}
+
+startBtn.addEventListener('click', startCamera);
+sliderBtn.addEventListener('click', startManual);
+slider.addEventListener('input', () => { target = slider.value / 100; });
+switchMode.addEventListener('click', () => {
+  if (mode === 'camera') startManual();
+  else { manual.hidden = true; switchMode.hidden = true; startCamera(); }
+});
+
+const STAGES = [[0, 'Bud'], [0.15, 'Waking'], [0.45, 'Opening'], [0.8, 'Full bloom']];
+const stageEls = [...$('stages').children];
+const stageEl = $('stage'), pctEl = $('pct'), fillEl = $('fill');
+let shownPct = -1;
+function updateGauge(b) {
+  const pct = Math.round(b * 100);
+  if (pct === shownPct) return;
+  shownPct = pct;
+  let s = 0;
+  STAGES.forEach(([at], i) => { if (b >= at - 0.001) s = i; });
+  stageEl.textContent = STAGES[s][1];
+  pctEl.textContent = `${pct}% open`;
+  fillEl.style.width = `${pct}%`;
+  stageEls.forEach((el, i) => el.classList.toggle('on', i === s));
+}
+
+// ---------- Main loop ----------
+const clock = new THREE.Clock();
+let t = 0;
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const now = performance.now();
+  t += dt;
+
+  if (mode === 'demo') {
+    target = 0.5 - 0.5 * Math.cos(t * 0.55);
+    yawTarget = 0;
+  } else if (mode === 'camera') {
+    trackHand(now);
+    const lost = now - lastSeen > 1200;
+    hint.hidden = !lost;
+    cam.classList.toggle('live', !lost);
+    camStatus.textContent = lost ? 'Looking for your hand…' : 'Tracking your hand';
+    if (lost) yawTarget = 0;
+  } else {
+    yawTarget = 0;
+  }
+
+  bloom = damp(bloom, target, mode === 'demo' ? 30 : 4.5, dt);
+  yaw = damp(yaw, yawTarget, 2.5, dt);
+  spin += dt * (calm ? 0.015 : 0.06);
+
+  applyBloom(bloom, t);
+  flower.rotation.y = spin + yaw;
+  flower.rotation.z = calm ? 0 : Math.sin(t * 0.6) * 0.022;
+  flower.position.y = calm ? 0 : Math.sin(t * 0.9) * 0.015;
+  pads.forEach(({ pad, phase }) => { pad.position.y = WATER_Y + 0.01 + (calm ? 0 : Math.sin(t * 0.8 + phase) * 0.008); });
+  water.material.uniforms.uTime.value = calm ? 0 : t;
+  updatePollen(dt, t, bloom);
+  updateGauge(bloom);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// Read-only peek at the live values, handy for tuning
+window.palmLotus = {
+  get mode() { return mode; },
+  get bloom() { return bloom; },
+  get handRatio() { return lastRatio; },
+};
+</script>
+</body>
+</html>

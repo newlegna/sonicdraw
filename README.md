@@ -2,6 +2,12 @@
 
 An interactive audio-visual drawing application. Draw with your mouse or touch to create art and music simultaneously!
 
+## Palm Lotus 🪷
+
+`palm-lotus.html` is a separate app: a 3D lotus that opens when you open your hand and closes when you make a fist. It uses your webcam and Google's MediaPipe hand tracker, which runs inside the browser, so no video leaves your computer.
+
+To use it, open `palm-lotus.html` in Chrome or Edge (double-clicking the file works), click **Start camera** and allow camera access. It needs an internet connection the first time it loads. If you don't have a camera, **Use a slider instead** opens and closes the lotus by hand.
+
 ## Features
 - Real-time audio synthesis based on drawing position
 - Multiple waveforms (Sine, Square, Sawtooth)

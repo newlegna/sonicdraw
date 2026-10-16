@@ -6,13 +6,14 @@ An interactive audio-visual drawing application. Draw with your mouse or touch t
 
 `flora.html` is a gesture-controlled flower studio based on an editorial "Form in motion" design. Choose a peony, iris or camellia. Pinch your thumb and index finger together to close the flower and spread them apart to open it. Hold your other hand open and wave it to make the flower sway in the wind.
 
+- **Music**: each flower plays its own music (peony in F major pentatonic, iris in D Lydian, camellia in the Japanese in-sen scale). The more open the flower, the fuller the sound and the more bell notes fall. Full bloom plays a flourish, waving your second hand rings wind chimes, and the petals pulse with the notes. The **Music on/off** button mutes it.
 - **Calibrate** measures your own pinch (2 steps, about 5 seconds) so the full range of your fingers opens the flower all the way.
 - **Play bloom** plays the opening animation from bud to full bloom.
 - The camera button shows or hides the camera view, and **Turn off gestures** switches to a slider.
 - **Pinch hand** (on the camera view) switches which hand does the pinching.
 - Drag the flower to turn it.
 
-Open `flora.html` in Chrome or Edge, click **Start camera** and allow camera access. It needs an internet connection when it starts. Video stays on your computer.
+Open `flora.html` in Chrome or Edge, click **Start camera** and allow camera access. On an iPad, open it from its web address in Safari (cameras only work on https:// pages). For example, with GitHub Pages turned on: `https://newlegna.github.io/sonicdraw/flora.html`. It needs an internet connection when it starts. Video stays on your computer.
 
 ## Palm Lotus 🪷
 

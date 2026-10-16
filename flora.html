@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Flora</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Flora">
 <meta name="description" content="Pinch your thumb and index finger to open and close a flower. Wave your other hand to make it sway. Hand tracking by MediaPipe runs in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,7 +42,7 @@ body {
   overflow: hidden;
 }
 [hidden] { display: none !important; }
-button { font: inherit; color: inherit; }
+button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outline-offset: 3px; }
 
 .app {
@@ -139,6 +141,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outl
 .notes .latin i { font-style: italic; }
 .notes .lang-label { margin-top: 18px; font-size: 9.5px; letter-spacing: 0.24em; color: var(--ink-faint); text-transform: uppercase; }
 .notes .lang { font: 500 15px/1.5 var(--font-han); letter-spacing: 0.1em; color: var(--ink-soft); }
+.notes .sound { font: italic 400 15px/1.4 var(--font-display); color: var(--ink-soft); }
 .notes .lang small { display: block; font: italic 400 14px/1.4 var(--font-display); letter-spacing: 0; color: var(--ink-faint); }
 
 .bottombar {
@@ -168,6 +171,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outl
   border-radius: 6px;
 }
 .controls .txt:hover { background: var(--paper-deep); }
+.controls .music { display: inline-flex; align-items: center; gap: 7px; }
+.controls .music .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
+.controls .music .eq i { width: 2px; height: 4px; background: var(--ink-faint); border-radius: 1px; }
+.controls .music[aria-pressed="true"] .eq i { background: var(--rose); animation: eq 0.9s ease-in-out infinite alternate; }
+.controls .music[aria-pressed="true"] .eq i:nth-child(2) { animation-delay: -0.3s; }
+.controls .music[aria-pressed="true"] .eq i:nth-child(3) { animation-delay: -0.6s; }
+@keyframes eq { from { height: 3px; } to { height: 12px; } }
 .controls .icon {
   width: 38px; height: 38px; border-radius: 50%;
   display: grid; place-items: center;
@@ -187,6 +197,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outl
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+.cam.mini {
+  position: fixed;
+  right: calc(var(--gr) + 4px);
+  bottom: 96px;
+  width: 200px;
+  height: 120px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 30px rgba(31, 27, 29, 0.2);
+  z-index: 5;
+  padding-bottom: 0;
+}
+.cam.mini .hud, .cam.mini .swap, .cam.mini .calib, .cam.mini .cam-card { display: none !important; }
 .cam video, .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cam video { object-fit: cover; transform: scaleX(-1); }
 .hud {
@@ -313,6 +336,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outl
     <span class="latin" id="nLatin">Iris · <i>Iris germanica</i></span>
     <span class="lang-label">Flower language</span>
     <span class="lang" id="nLang">希望 · 信念<small>hope · faith</small></span>
+    <span class="lang-label">Sound</span>
+    <span class="sound" id="nSound">D Lydian · dreamy</span>
   </aside>
 
   <footer class="bottombar">
@@ -322,9 +347,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outl
     </div>
     <div class="controls">
       <label class="slider" id="sliderWrap" hidden>Open <input type="range" id="bloomSlider" min="0" max="100" value="60" aria-label="How open the flower is"></label>
+      <button class="txt music" type="button" id="musicBtn" aria-pressed="false"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span id="musicLabel">Music off</span></button>
       <button class="txt" type="button" id="calibBtn">Calibrate</button>
       <button class="txt" type="button" id="playBtn">Play bloom</button>
-      <button class="icon" type="button" id="camToggle" aria-pressed="true" aria-label="Show camera view" title="Show or hide the camera view">
+      <button class="icon" type="button" id="camToggle" aria-pressed="true" aria-label="Shrink camera view" title="Shrink or expand the camera view">
         <svg viewBox="0 0 24 24" fill="none" stroke="#1f1b1d" stroke-width="1.6" stroke-linejoin="round"><path d="M4 8h3l1.6-2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
       </button>
       <button class="txt off" type="button" id="gestureBtn">Turn off gestures <span aria-hidden="true">↗</span></button>
@@ -358,7 +384,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outl
   <div class="cam-card" id="camCard">
     <div>
       <h2 id="camTitle">Turn on your camera to use gestures</h2>
-      <p id="camMsg">Pinch with one hand to open the flower. Hold your other hand open and wave to make it sway. Video stays on this device.</p>
+      <p id="camMsg">Pinch with one hand to open the flower. Hold your other hand open and wave to make it sway and ring. Music starts with the camera. Video stays on this device.</p>
       <button class="pill" type="button" id="startBtn">Start camera</button>
       <button class="pill ghost" type="button" id="manualBtn">Use a slider instead</button>
     </div>
@@ -413,10 +439,11 @@ function fitCamera() {
   camera.aspect = aspect;
   const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   // Leave room for the top bar and bottom bar; on wide screens keep the flower in the middle column.
-  const needH = 4.0, needW = aspect > 1.25 ? 4.3 / 0.56 : 4.4;
+  const narrow = w < 900; // copy sits above the flower instead of beside it
+  const needH = narrow ? 4.6 : 4.0, needW = aspect > 1.25 ? 4.3 / 0.56 : 4.4;
   const dist = Math.max(needH / (2 * t), needW / (2 * t * aspect));
   camera.position.set(0, dist * 0.16, dist);
-  camera.lookAt(0, w < 900 ? 0.15 : 0.3, 0);
+  camera.lookAt(0, narrow ? 0.55 : 0.3, 0);
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(fitCamera).observe(stageEl);
@@ -611,6 +638,7 @@ MAT.spathe.emissiveIntensity = MAT.sepal.emissiveIntensity = 0.05;
 const FLOWERS = {
   peony: {
     num: '01', han: '牡丹', latin: 'Peony · <i>Paeonia lactiflora</i>', lang: '富贵 · 圆满', langEn: 'prosperity · fullness',
+    music: { label: 'F major pentatonic · warm', root: 53, steps: [0, 2, 4, 7, 9] },
     lift: -0.35, scale: 1.25,
     rings: [
       { n: 5, r: 0.24, y: -0.04, mat: 'sepal', P: { L: 0.62, W: 0.3, m: 0.55, base: 0.3, n: 1.7 },
@@ -630,6 +658,7 @@ const FLOWERS = {
   },
   iris: {
     num: '02', han: '鸢尾', latin: 'Iris · <i>Iris germanica</i>', lang: '希望 · 信念', langEn: 'hope · faith',
+    music: { label: 'D Lydian · dreamy', root: 50, steps: [0, 2, 4, 6, 7, 9, 11] },
     lift: -0.25, scale: 1,
     rings: [
       // falls: the three petals that drop down, with the yellow beard
@@ -659,6 +688,7 @@ const FLOWERS = {
   },
   camellia: {
     num: '03', han: '山茶', latin: 'Camellia · <i>Camellia japonica</i>', lang: '理想的爱 · 谦逊', langEn: 'ideal love · modesty',
+    music: { label: 'A in-sen · still', root: 45, steps: [0, 1, 5, 7, 10] },
     lift: -0.05, scale: 1.3,
     rings: [
       { n: 5, r: 0.2, y: -0.04, mat: 'sepal', P: { L: 0.42, W: 0.26, m: 0.5, base: 0.4, n: 2 },
@@ -742,12 +772,12 @@ function buildFlower(spec) {
 
   return {
     group, spec,
-    update(b, t, flutter) {
+    update(b, t, flutter, pulse) {
       for (const { cfg, petals } of rings) {
         const p = ease(clamp01((b - cfg.from) / (cfg.to - cfg.from)));
         for (const pt of petals) {
           const breathe = calm ? 0 : Math.sin(t * 1.1 + pt.phase) * 0.01;
-          const shiver = flutter * Math.sin(t * 9 + pt.phase * 3) * 0.05;
+          const shiver = flutter * Math.sin(t * 9 + pt.phase * 3) * 0.05 + pulse * 0.035 * p;
           pt.pivot.rotation.x = lerp(cfg.closed.tilt, cfg.open.tilt, p) + pt.jitter * (0.3 + 0.7 * p) + pt.alt * 0.02 + breathe + shiver;
           pt.pivot.scale.setScalar(pt.size * lerp(cfg.grow ?? 0.94, 1.02, p));
           pt.mesh.morphTargetInfluences[0] = p;
@@ -799,6 +829,160 @@ function placeFlower(name) {
 placeFlower(current);
 flowers[current].group.visible = true;
 
+// ---------- Music: the flower plays itself ----------
+// A soft pad that brightens as the flower opens, falling bell notes that grow busier
+// with the bloom, a flourish at full bloom, and wind chimes when the second hand waves.
+const music = (() => {
+  let ctx = null, master, verb, delay, padFilter, padBus, voices = [], noiseBuf, cfg = FLOWERS.iris.music;
+  let on = false, next = 0, walk = 3;
+  const mtof = (n) => 440 * Math.pow(2, (n - 69) / 12);
+
+  function build() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC();
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 3;
+    comp.connect(ctx.destination);
+    master = ctx.createGain(); master.gain.value = 0; master.connect(comp);
+
+    // Reverb from a made-up room: decaying noise
+    const len = Math.floor(ctx.sampleRate * 3.2);
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    verb = ctx.createConvolver(); verb.buffer = ir;
+    const verbOut = ctx.createGain(); verbOut.gain.value = 0.5;
+    verb.connect(verbOut).connect(master);
+
+    // Echo for the bells
+    delay = ctx.createDelay(1.5); delay.delayTime.value = 0.42;
+    const fb = ctx.createGain(); fb.gain.value = 0.36;
+    const dlp = ctx.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2400;
+    delay.connect(dlp).connect(fb).connect(delay);
+    const dOut = ctx.createGain(); dOut.gain.value = 0.32;
+    dlp.connect(dOut); dOut.connect(master); dOut.connect(verb);
+
+    // Pad: five held notes through a filter that opens with the flower
+    padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 260; padFilter.Q.value = 0.7;
+    padBus = ctx.createGain(); padBus.gain.value = 0.05;
+    padFilter.connect(padBus); padBus.connect(master); padBus.connect(verb);
+    for (let i = 0; i < 5; i++) {
+      const g = ctx.createGain(); g.gain.value = 0; g.connect(padFilter);
+      const oscs = [-7, 7].map((det, k) => { const o = ctx.createOscillator(); o.type = k ? 'sawtooth' : 'triangle'; o.detune.value = det; o.connect(g); o.start(); return o; });
+      voices.push({ g, oscs });
+    }
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
+    const lfoAmt = ctx.createGain(); lfoAmt.gain.value = 110;
+    lfo.connect(lfoAmt).connect(padFilter.frequency); lfo.start();
+
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  }
+
+  function chord(c) { const s = c.steps; return [c.root - 12, c.root, c.root + s[2 % s.length], c.root + s[4 % s.length], c.root + 12 + s[1]]; }
+  function retune() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    chord(cfg).forEach((n, i) => voices[i].oscs.forEach((o) => o.frequency.setTargetAtTime(mtof(n), t, 0.4)));
+  }
+  // Scale step -> MIDI note, starting an octave above the pad's root
+  function note(step) {
+    const s = cfg.steps, n = s.length;
+    return cfg.root + 12 + Math.floor(step / n) * 12 + s[((step % n) + n) % n];
+  }
+  function bell(time, midi, vel, pan = 0) {
+    const f = mtof(midi);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(vel, time + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 2.6);
+    for (const [ratio, amp] of [[1, 1], [2, 0.22], [3.01, 0.07]]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * ratio;
+      const og = ctx.createGain(); og.gain.value = amp;
+      o.connect(og).connect(g); o.start(time); o.stop(time + 2.7);
+    }
+    let out = g;
+    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); out = p; }
+    out.connect(master); out.connect(delay); out.connect(verb);
+  }
+  function wind(time, strength) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, time); bp.frequency.exponentialRampToValueAtTime(2400, time + 0.9);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(0.05 * strength + 0.01, time + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 1.4);
+    src.connect(bp).connect(g); g.connect(master); g.connect(verb);
+    src.start(time); src.stop(time + 1.5);
+  }
+
+  return {
+    get on() { return on; },
+    get label() { return cfg.label; },
+    start() { // must run inside a tap or click so phones and iPads allow sound
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* not supported */ }
+      if (!ctx) { build(); retune(); }
+      if (ctx.state !== 'running') ctx.resume();
+      on = true;
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setTargetAtTime(0.9, ctx.currentTime, 0.5);
+      next = ctx.currentTime + 0.3;
+    },
+    stop() { on = false; if (ctx) master.gain.setTargetAtTime(0, ctx.currentTime, 0.25); },
+    wake() { if (ctx && on && ctx.state !== 'running') ctx.resume(); },
+    setFlower(c) {
+      cfg = c; retune();
+      if (ctx && on) { const t = ctx.currentTime + 0.05; [0, 2, 4].forEach((k, i) => bell(t + i * 0.12, note(k), 0.07)); }
+    },
+    update(b, onNote) {
+      if (!ctx || !on) return;
+      const t = ctx.currentTime;
+      padFilter.frequency.setTargetAtTime(240 + 3400 * Math.pow(b, 1.5), t, 0.25);
+      padBus.gain.setTargetAtTime(0.06 + 0.08 * b, t, 0.3);
+      voices.forEach((v, i) => {
+        const want = i < 2 ? 0.2 : clamp01((b - (i - 1) * 0.2) / 0.22) * 0.14;
+        v.g.gain.setTargetAtTime(want, t, 0.4);
+      });
+      if (b < 0.12) { next = Math.max(next, t + 0.2); return; }
+      while (next < t + 0.12) { // falling notes, busier as it opens
+        const span = Math.round(cfg.steps.length * (0.8 + 1.6 * b));
+        walk = Math.max(0, Math.min(span, walk + Math.round((Math.random() - 0.5) * 3.2)));
+        if (Math.random() < 0.85) {
+          bell(next, note(walk), 0.04 + 0.09 * b, (Math.random() - 0.5) * 0.8);
+          setTimeout(onNote, Math.max(0, (next - t) * 1000));
+        }
+        next += lerp(1.15, 0.2, b) * (Math.random() < 0.2 ? 2 : 1);
+      }
+    },
+    flourish() {
+      if (!ctx || !on) return;
+      const t = ctx.currentTime + 0.03, n = cfg.steps.length * 2 + 1;
+      for (let i = 0; i < n; i++) bell(t + i * 0.075, note(i), 0.08, -0.6 + 1.2 * i / n);
+    },
+    settle() { if (ctx && on) bell(ctx.currentTime + 0.03, cfg.root, 0.1); },
+    chime(dir, strength) {
+      if (!ctx || !on) return;
+      const t = ctx.currentTime + 0.02, n = 5 + Math.round(strength * 5), top = cfg.steps.length * 3;
+      for (let i = 0; i < n; i++) {
+        const step = dir > 0 ? top - n + i : top - i;
+        bell(t + i * 0.055 + Math.random() * 0.02, note(step), 0.05, dir * (-0.7 + 1.4 * i / n));
+      }
+      wind(t, strength);
+    },
+  };
+})();
+
+let musicWanted = true;
+let pulse = 0;
+function setMusic(onNow) {
+  musicWanted = onNow;
+  if (onNow) music.start(); else music.stop();
+  $('musicBtn').setAttribute('aria-pressed', String(onNow));
+  $('musicLabel').textContent = onNow ? 'Music on' : 'Music off';
+}
+$('musicBtn').addEventListener('click', () => setMusic(!music.on));
+
 // ---------- UI: flower info ----------
 const navBtns = [...document.querySelectorAll('.nav button')];
 function showInfo(name) {
@@ -808,9 +992,12 @@ function showInfo(name) {
   $('nLatin').innerHTML = s.latin;
   $('nLang').innerHTML = `${s.lang}<small>${s.langEn}</small>`;
   $('eyebrow').textContent = `Bloom / ${s.num}`;
+  $('nSound').textContent = s.music.label;
+  music.setFlower(s.music);
   navBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.flower === name)));
 }
 navBtns.forEach((b) => b.addEventListener('click', () => {
+  music.wake();
   const name = b.dataset.flower;
   if (name === current || name === incoming) return;
   incoming = name; swapT = 0;
@@ -824,6 +1011,8 @@ function updateHeadline(b) {
   let k = 0;
   HEADLINES.forEach(([at], i) => { if (b >= at) k = i; });
   if (k === shownHead) return;
+  if (k === 3 && shownHead >= 0) music.flourish();
+  if (k === 0 && shownHead > 0) music.settle();
   shownHead = k;
   $('hRoman').textContent = HEADLINES[k][1];
   $('hItalic').textContent = HEADLINES[k][2];
@@ -844,7 +1033,7 @@ const octx = overlay.getContext('2d');
 let landmarker = null, loading = null, stream = null, lastVideoTime = -1;
 let lastControlSeen = 0;
 let pinchNow = null;
-let palmPrevX = null, palmPrevT = 0;
+let palmPrevX = null, palmPrevT = 0, lastChime = 0;
 let calib = null; // { step, t0, samples, closed }
 
 function loadLandmarker() {
@@ -973,6 +1162,7 @@ function trackHands(now, dt) {
       const gap = Math.max((now - palmPrevT) / 1000, 1e-3);
       const vx = (x - palmPrevX) / gap; // screen widths per second
       if (isOpen) swayVel += vx * 9 * gap; // waving pushes the flower like wind
+      if (isOpen && Math.abs(vx) > 0.5 && now - lastChime > 450) { music.chime(Math.sign(vx), Math.min(1, Math.abs(vx) / 2)); lastChime = now; }
       flutter = Math.min(1, flutter + Math.abs(vx) * 1.6 * gap);
     }
     palmPrevX = x; palmPrevT = now;
@@ -1029,7 +1219,7 @@ function runCalibration(now) {
 $('calibBtn').addEventListener('click', startCalibration);
 
 // ---------- Play bloom ----------
-$('playBtn').addEventListener('click', () => { playStart = performance.now(); playFrom = bloom; });
+$('playBtn').addEventListener('click', () => { if (musicWanted) setMusic(true); playStart = performance.now(); playFrom = bloom; });
 function playTarget(now) {
   const s = (now - playStart) / 1000;
   if (s < 1) return lerp(playFrom, 0, ease(s));
@@ -1048,7 +1238,7 @@ function setCamCard(title, msg, isError) {
   $('camTitle').textContent = title;
   $('camMsg').textContent = msg;
   $('camMsg').classList.toggle('err', !!isError);
-  if (camEl.hidden) toggleCamPanel(true);
+  if (camEl.classList.contains('mini')) toggleCamPanel(true);
 }
 function stopCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
@@ -1058,6 +1248,7 @@ function stopCamera() {
   octx.clearRect(0, 0, overlay.width, overlay.height);
 }
 function enterManual() {
+  if (musicWanted) setMusic(true);
   stopCamera();
   mode = 'manual';
   target = slider.value / 100;
@@ -1070,6 +1261,7 @@ function enterManual() {
 }
 
 async function startCamera() {
+  if (musicWanted) setMusic(true);
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     setCamCard('The camera isn’t available here', 'Open this page in Chrome or Edge, from an https:// address or as a file on your computer.', true);
     return;
@@ -1121,11 +1313,11 @@ swapBtn.addEventListener('click', () => {
   swapBtn.textContent = `Pinch hand: ${swapHands ? 'left' : 'right'}`;
 });
 function toggleCamPanel(show) {
-  camEl.hidden = !show;
+  camEl.classList.toggle('mini', !show); // shrink rather than hide, so tracking keeps running
   $('camToggle').setAttribute('aria-pressed', String(show));
-  $('camToggle').setAttribute('aria-label', show ? 'Hide camera view' : 'Show camera view');
+  $('camToggle').setAttribute('aria-label', show ? 'Shrink camera view' : 'Expand camera view');
 }
-$('camToggle').addEventListener('click', () => toggleCamPanel(camEl.hidden));
+$('camToggle').addEventListener('click', () => toggleCamPanel(camEl.classList.contains('mini')));
 
 // ---------- Main loop ----------
 const clock = new THREE.Clock();
@@ -1154,6 +1346,8 @@ function frame() {
   swayVel += (-14 * sway - 2.6 * swayVel) * dt;
   sway = Math.max(-0.4, Math.min(0.4, sway + swayVel * dt));
   flutter = damp(flutter, 0, 2, dt);
+  pulse = damp(pulse, 0, 5, dt);
+  music.update(bloom, () => { pulse = Math.min(1, pulse + 0.7); });
   const breeze = calm ? 0 : Math.sin(t * 0.7) * 0.012 + Math.sin(t * 1.9) * 0.004;
   swayPivot.rotation.z = -(sway * 0.4) + breeze;
   swayPivot.rotation.x = calm ? 0 : Math.sin(t * 0.5) * 0.008;
@@ -1174,7 +1368,7 @@ function frame() {
       if (k >= 1) { current = incoming; incoming = null; placeFlower(current); }
     }
   }
-  for (const name of Object.keys(flowers)) if (flowers[name].group.visible) flowers[name].update(bloom, t, flutter);
+  for (const name of Object.keys(flowers)) if (flowers[name].group.visible) flowers[name].update(bloom, t, flutter, pulse);
 
   updateHeadline(bloom);
   renderer.render(scene, camera);
@@ -1184,7 +1378,7 @@ requestAnimationFrame(frame);
 
 window.flora = {
   get mode() { return mode; }, get bloom() { return bloom; }, get pinch() { return pinchNow; },
-  get flower() { return current; }, get sway() { return sway; },
+  get flower() { return current; }, get sway() { return sway; }, get music() { return music.on; },
 };
 </script>
 </body>

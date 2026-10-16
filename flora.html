@@ -1,0 +1,1191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flora</title>
+<meta name="description" content="Pinch your thumb and index finger to open and close a flower. Wave your other hand to make it sway. Hand tracking by MediaPipe runs in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..600;1,6..96,400..600&family=Hanken+Grotesk:wght@400;500;600&family=Noto+Serif+SC:wght@500&display=swap">
+<style>
+/* Layout: an editorial "specimen" stage on paper (copy left, flower center, notes right, controls along the bottom rule), with the live camera strip beneath. */
+:root {
+  --paper: #f5f2ec;
+  --paper-deep: #ebe6dd;
+  --ink: #1f1b1d;
+  --ink-soft: #6f696b;
+  --ink-faint: #a29b9c;
+  --line: rgba(31, 27, 29, 0.12);
+  --rose: #b0475a;
+  --track: #5fc46d;
+  --pinch: #f2c94c;
+  --palm: #4fb3c8;
+  --hud: rgba(30, 24, 28, 0.82);
+  --hud-ink: #f4efe9;
+  --font-display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --font-ui: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-han: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --gl: max(16px, env(safe-area-inset-left, 0px));
+  --gr: max(16px, env(safe-area-inset-right, 0px));
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--rose); outline-offset: 3px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ---------- Stage ---------- */
+.stage {
+  position: relative;
+  min-height: 0;
+  background: radial-gradient(70% 60% at 50% 45%, #fbf9f5 0%, var(--paper) 70%);
+  overflow: hidden;
+}
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#scene:active { cursor: grabbing; }
+
+.topbar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px calc(var(--gr) + 14px) 16px calc(var(--gl) + 14px);
+  border-bottom: 1px solid var(--line);
+  z-index: 2;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand svg { width: 26px; height: 26px; flex: none; }
+.brand b { display: block; font-weight: 600; letter-spacing: 0.22em; font-size: 14px; }
+.brand small { display: block; font-size: 9.5px; letter-spacing: 0.24em; color: var(--ink-soft); text-transform: uppercase; }
+.nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.nav .label { font-size: 10px; letter-spacing: 0.22em; color: var(--ink-faint); text-transform: uppercase; margin-right: 10px; }
+.nav button {
+  background: none;
+  border: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  cursor: pointer;
+  position: relative;
+}
+.nav button span { color: var(--ink-faint); margin-right: 6px; font-weight: 500; }
+.nav button[aria-pressed="true"] { color: var(--ink); }
+.nav button[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1.5px; background: var(--rose);
+}
+.nav button:hover { color: var(--ink); }
+
+.copy {
+  position: absolute;
+  left: calc(var(--gl) + 14px);
+  top: 50%;
+  transform: translateY(-46%);
+  width: min(300px, 28%);
+  z-index: 1;
+  pointer-events: none;
+}
+.eyebrow {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 10px; letter-spacing: 0.24em; color: var(--ink-soft); text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow::before { content: ""; width: 32px; height: 1px; background: var(--ink-faint); }
+.headline {
+  margin: 18px 0 16px;
+  font: 400 clamp(40px, 5.4vw, 74px)/0.98 var(--font-display);
+  font-variation-settings: "opsz" 96;
+  letter-spacing: -0.02em;
+}
+.headline span, .headline em { display: block; }
+.headline em { font-style: italic; color: var(--ink); }
+.tagline { margin: 0; font: 500 13px/1.6 var(--font-han); letter-spacing: 0.12em; color: var(--ink-soft); }
+.tagline small { display: block; font: 400 12px/1.5 var(--font-ui); letter-spacing: 0.02em; color: var(--ink-faint); }
+
+.notes {
+  position: absolute;
+  right: calc(var(--gr) + 14px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(220px, 22%);
+  display: grid;
+  gap: 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+.notes .num { font: italic 400 15px/1 var(--font-display); color: var(--ink-faint); }
+.notes .han { font: 500 26px/1.3 var(--font-han); letter-spacing: 0.06em; margin-top: 8px; }
+.notes .latin { font: 400 19px/1.3 var(--font-display); }
+.notes .latin i { font-style: italic; }
+.notes .lang-label { margin-top: 18px; font-size: 9.5px; letter-spacing: 0.24em; color: var(--ink-faint); text-transform: uppercase; }
+.notes .lang { font: 500 15px/1.5 var(--font-han); letter-spacing: 0.1em; color: var(--ink-soft); }
+.notes .lang small { display: block; font: italic 400 14px/1.4 var(--font-display); letter-spacing: 0; color: var(--ink-faint); }
+
+.bottombar {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+  padding: 14px calc(var(--gr) + 14px) 16px calc(var(--gl) + 14px);
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(245, 242, 236, 0.6), var(--paper) 40%);
+  z-index: 2;
+}
+.instruction { display: flex; align-items: baseline; gap: 28px; min-width: 0; }
+.instruction p { margin: 0; font: italic 400 19px/1.2 var(--font-display); }
+.instruction p small { display: block; font: 500 11.5px/1.6 var(--font-han); font-style: normal; letter-spacing: 0.14em; color: var(--ink-faint); }
+.status { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); }
+.status.on { color: var(--ink); }
+.status.on::before { background: var(--track); box-shadow: 0 0 0 3px rgba(95, 196, 109, 0.2); }
+.controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.controls .txt {
+  background: none; border: 0; cursor: pointer;
+  padding: 8px 10px; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--ink);
+  border-radius: 6px;
+}
+.controls .txt:hover { background: var(--paper-deep); }
+.controls .icon {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); background: var(--paper); cursor: pointer; margin: 0 6px;
+}
+.controls .icon[aria-pressed="false"] { opacity: 0.55; }
+.controls .icon svg { width: 17px; height: 17px; }
+.controls .off { display: inline-flex; align-items: center; gap: 6px; }
+.slider { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-soft); }
+.slider input { width: 180px; accent-color: var(--rose); }
+
+/* ---------- Camera strip ---------- */
+.cam {
+  position: relative;
+  height: clamp(180px, 32vh, 400px);
+  background: #1c1719;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.cam video, .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cam video { object-fit: cover; transform: scaleX(-1); }
+.hud {
+  position: absolute;
+  top: 14px;
+  left: calc(var(--gl) + 4px);
+  width: min(330px, calc(100% - 32px));
+  background: var(--hud);
+  color: var(--hud-ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.hud .row { padding: 10px 14px; display: grid; gap: 6px; }
+.hud .row + .row { border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.hud .head { display: flex; align-items: baseline; gap: 10px; }
+.hud .id { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: rgba(244, 239, 233, 0.6); }
+.hud .name { font-weight: 600; font-size: 14px; }
+.hud .name small { font: 500 11px var(--font-han); color: rgba(244, 239, 233, 0.55); margin-left: 6px; letter-spacing: 0.08em; }
+.hud .val { margin-left: auto; font: italic 500 17px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.hud .bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.hud .bar i { display: block; height: 100%; width: 0%; background: var(--track); border-radius: 3px; }
+.hud .sub { font-size: 11.5px; color: rgba(244, 239, 233, 0.62); }
+.hud .sub b { color: var(--hud-ink); font-weight: 500; }
+.swap {
+  position: absolute; right: calc(var(--gr) + 4px); top: 14px;
+  background: var(--hud); color: var(--hud-ink); border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 12px; border-radius: 999px; font-size: 11.5px; cursor: pointer;
+}
+
+.cam-card {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 16px var(--gr) 16px var(--gl);
+  background: radial-gradient(80% 120% at 50% 100%, #2c2226 0%, #1c1719 70%);
+  color: var(--hud-ink);
+  text-align: center;
+}
+.cam-card > div { display: grid; gap: 12px; justify-items: center; max-width: 440px; }
+.cam-card h2 { margin: 0; font: italic 400 26px/1.15 var(--font-display); }
+.cam-card p { margin: 0; color: rgba(244, 239, 233, 0.66); font-size: 13px; }
+.cam-card .err { color: #ffb3bd; }
+.pill {
+  border: 0; border-radius: 999px; padding: 12px 22px; cursor: pointer;
+  background: var(--hud-ink); color: var(--ink); font-weight: 600; font-size: 14px;
+}
+.pill:disabled { opacity: 0.6; cursor: progress; }
+.pill.ghost { background: none; color: var(--hud-ink); text-decoration: underline; text-underline-offset: 3px; padding: 4px 8px; font-weight: 500; font-size: 12.5px; }
+
+.calib {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  background: var(--hud); color: var(--hud-ink);
+  border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px;
+  padding: 14px 16px; display: grid; gap: 8px;
+}
+.calib .step { font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pinch); }
+.calib .say { font: italic 400 20px/1.2 var(--font-display); }
+.calib .bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.calib .bar i { display: block; height: 100%; width: 0%; background: var(--pinch); }
+
+@media (max-width: 900px) {
+  .notes { display: none; }
+  .copy { top: 84px; transform: none; width: auto; right: calc(var(--gr) + 14px); }
+  .headline { font-size: clamp(34px, 9vw, 48px); margin: 10px 0 8px; }
+  .headline span, .headline em { display: inline; }
+  .tagline small { display: inline; margin-left: 6px; }
+  .instruction p { font-size: 16px; }
+}
+@media (max-width: 640px) {
+  .topbar { flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 12px; padding-bottom: 10px; }
+  .nav .label { display: none; }
+  .nav { justify-content: flex-start; margin-left: -10px; }
+  .copy { top: 112px; }
+  .instruction { gap: 12px; }
+  .instruction p small { display: none; }
+  .bottombar { padding-top: 10px; padding-bottom: 10px; }
+  .controls .txt { padding: 6px 7px; }
+  .slider input { width: 140px; }
+  .cam { height: clamp(170px, 30vh, 280px); }
+  .hud { width: min(270px, calc(100% - 100px)); }
+  .hud .row { padding: 8px 11px; }
+  .swap { top: auto; bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="app">
+
+<main class="stage" id="stage">
+  <canvas id="scene" aria-label="A 3D flower that opens and closes. Drag to turn it."></canvas>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 26 26" aria-hidden="true"><g stroke="#b0475a" stroke-width="1.6" stroke-linecap="round"><path d="M13 2v22M2 13h22M5.2 5.2l15.6 15.6M20.8 5.2 5.2 20.8"/></g></svg>
+      <div><b>FLORA</b><small>Form in motion</small></div>
+    </div>
+    <nav class="nav" aria-label="Flowers">
+      <span class="label">Studies</span>
+      <button type="button" data-flower="peony" aria-pressed="false"><span>01</span>Peony</button>
+      <button type="button" data-flower="iris" aria-pressed="true"><span>02</span>Iris</button>
+      <button type="button" data-flower="camellia" aria-pressed="false"><span>03</span>Camellia</button>
+    </nav>
+  </header>
+
+  <section class="copy">
+    <div class="eyebrow" id="eyebrow">Bloom / 02</div>
+    <h1 class="headline" aria-live="polite"><span id="hRoman">Slowly</span> <em id="hItalic">waking.</em></h1>
+    <p class="tagline">让手势，唤醒一朵花。<small>Let a gesture wake a flower.</small></p>
+  </section>
+
+  <aside class="notes" aria-label="About this flower">
+    <span class="num" id="nNum">02</span>
+    <span class="han" id="nHan">鸢尾</span>
+    <span class="latin" id="nLatin">Iris · <i>Iris germanica</i></span>
+    <span class="lang-label">Flower language</span>
+    <span class="lang" id="nLang">希望 · 信念<small>hope · faith</small></span>
+  </aside>
+
+  <footer class="bottombar">
+    <div class="instruction">
+      <p>Pinch your fingers to open and close the flower<small>捏合手指，控制花朵开合</small></p>
+      <span class="status" id="status">Camera off</span>
+    </div>
+    <div class="controls">
+      <label class="slider" id="sliderWrap" hidden>Open <input type="range" id="bloomSlider" min="0" max="100" value="60" aria-label="How open the flower is"></label>
+      <button class="txt" type="button" id="calibBtn">Calibrate</button>
+      <button class="txt" type="button" id="playBtn">Play bloom</button>
+      <button class="icon" type="button" id="camToggle" aria-pressed="true" aria-label="Show camera view" title="Show or hide the camera view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1f1b1d" stroke-width="1.6" stroke-linejoin="round"><path d="M4 8h3l1.6-2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+      </button>
+      <button class="txt off" type="button" id="gestureBtn">Turn off gestures <span aria-hidden="true">↗</span></button>
+    </div>
+  </footer>
+</main>
+
+<section class="cam" id="cam" aria-label="Camera">
+  <video id="video" playsinline muted></video>
+  <canvas id="overlay"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="row">
+      <div class="head"><span class="id">01</span><span class="name">Two-finger open<small>两指张合</small></span><span class="val" id="pinchVal">0%</span></div>
+      <div class="bar"><i id="pinchBar"></i></div>
+      <div class="sub">Thumb × index · <b id="pinchNote">show your hand</b></div>
+    </div>
+    <div class="row">
+      <div class="head"><span class="id">02</span><span class="name">Second hand<small>第二只手</small></span></div>
+      <div class="sub" id="palmNote">Not in view · hold up an open palm and wave</div>
+    </div>
+  </div>
+  <button class="swap" type="button" id="swapBtn" hidden title="Choose which hand pinches">Pinch hand: right</button>
+
+  <div class="calib" id="calib" hidden>
+    <span class="step" id="calibStep">Step 1 of 2</span>
+    <span class="say" id="calibSay">Pinch your thumb and index finger together</span>
+    <div class="bar"><i id="calibBar"></i></div>
+  </div>
+
+  <div class="cam-card" id="camCard">
+    <div>
+      <h2 id="camTitle">Turn on your camera to use gestures</h2>
+      <p id="camMsg">Pinch with one hand to open the flower. Hold your other hand open and wave to make it sway. Video stays on this device.</p>
+      <button class="pill" type="button" id="startBtn">Start camera</button>
+      <button class="pill ghost" type="button" id="manualBtn">Use a slider instead</button>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- Settings ----------
+const MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+// Thumb-to-index distance divided by palm length. Calibrate replaces these.
+const DEFAULT_CAL = { closed: 0.25, open: 0.95 };
+
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (id) => document.getElementById(id);
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = (t) => t * t * (3 - 2 * t);
+const damp = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
+function rng(seed) { // small repeatable random generator
+  let s = seed >>> 0;
+  return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const R = rng(7);
+const rand = (a, b) => a + R() * (b - a);
+
+// ---------- Renderer ----------
+const stageEl = $('stage');
+const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+function fitCamera() {
+  const w = stageEl.clientWidth, h = stageEl.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  const aspect = w / h;
+  camera.aspect = aspect;
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  // Leave room for the top bar and bottom bar; on wide screens keep the flower in the middle column.
+  const needH = 4.0, needW = aspect > 1.25 ? 4.3 / 0.56 : 4.4;
+  const dist = Math.max(needH / (2 * t), needW / (2 * t * aspect));
+  camera.position.set(0, dist * 0.16, dist);
+  camera.lookAt(0, w < 900 ? 0.15 : 0.3, 0);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(fitCamera).observe(stageEl);
+fitCamera();
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cdbf, 0.9));
+const key = new THREE.DirectionalLight(0xfff4ea, 2.4);
+key.position.set(2.5, 5.5, 4.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 20 });
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.025;
+key.shadow.radius = 4;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xf1ecff, 0.7);
+fill.position.set(-4, 1, 3);
+scene.add(fill);
+const back = new THREE.DirectionalLight(0xfff0f4, 1.5);
+back.position.set(0, 3, -5);
+scene.add(back);
+
+// ---------- Petal textures, painted on the fly ----------
+function paintPetal(o) {
+  const W = 256, H = 512;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const r = rng(o.seed || 3);
+  const lg = g.createLinearGradient(0, H, 0, 0); // canvas bottom = base of the petal
+  o.stops.forEach(([at, col]) => lg.addColorStop(at, col));
+  g.fillStyle = lg;
+  g.fillRect(0, 0, W, H);
+  const eg = g.createLinearGradient(0, 0, W, 0);
+  eg.addColorStop(0, o.edge); eg.addColorStop(0.2, 'rgba(255,255,255,0)');
+  eg.addColorStop(0.8, 'rgba(255,255,255,0)'); eg.addColorStop(1, o.edge);
+  g.fillStyle = eg;
+  g.fillRect(0, 0, W, H);
+  if (o.signal) o.signal(g, W, H, r);
+  g.lineCap = 'round';
+  for (let i = 0; i < o.veins; i++) {
+    const t = i / (o.veins - 1);
+    const x0 = W / 2 + (t - 0.5) * W * 0.14;
+    const xe = t * W + (r() - 0.5) * 10;
+    g.strokeStyle = o.veinColor;
+    g.globalAlpha = o.veinAlpha * (0.45 + r() * 0.75);
+    g.lineWidth = 0.6 + r() * 1.2;
+    g.beginPath();
+    g.moveTo(x0, H);
+    g.bezierCurveTo(x0 + (xe - x0) * 0.15, H * 0.6, xe + (r() - 0.5) * 24, H * 0.3, xe, H * (o.veinReach ?? 0.08) + r() * 30);
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+  if (o.after) o.after(g, W, H, r);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function petalMaterial(tex, sheen) {
+  return new THREE.MeshPhysicalMaterial({
+    map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.14, // a little glow so shaded petals still read as translucent
+    side: THREE.DoubleSide, roughness: 0.62, metalness: 0,
+    sheen: 0.8, sheenRoughness: 0.5, sheenColor: new THREE.Color(sheen), envMapIntensity: 0.5,
+  });
+}
+
+// ---------- Petal shapes ----------
+function profile(u, P) {
+  if (u <= P.m) { const t = u / P.m; return P.base + (1 - P.base) * Math.pow(Math.sin(t * Math.PI / 2), 0.9); }
+  const t = (u - P.m) / (1 - P.m);
+  return Math.pow(Math.max(0, 1 - Math.pow(t, P.n)), 1 / P.n);
+}
+const SEG_U = 26, SEG_V = 18;
+// Petal grows up +y from its base; +z points away from the flower's center.
+function shapePetal(P, S) {
+  const pos = new Float32Array((SEG_U + 1) * (SEG_V + 1) * 3);
+  const cp = S.curlPow ?? 1.6;
+  let y = 0, z = 0, k = 0;
+  for (let i = 0; i <= SEG_U; i++) {
+    const u = i / SEG_U;
+    const th = S.curl * Math.pow(u, cp);
+    const ny = -Math.sin(th), nz = Math.cos(th);
+    const hw = P.W * profile(u, P);
+    for (let j = 0; j <= SEG_V; j++) {
+      const v = (j / SEG_V) * 2 - 1, av = Math.abs(v);
+      let off = -S.cup * v * v * hw; // edges fold toward the center
+      off += S.ruffle * hw * Math.pow(av, 2.2) * (0.3 + 0.7 * u) * Math.sin(P.seed + S.freq * Math.PI * (u * 2.3 + av * 1.4));
+      off += S.ruffle * 0.5 * hw * Math.pow(u, 5) * Math.sin(P.seed * 1.7 + v * S.freq * 2.2);
+      pos[k++] = v * hw;
+      pos[k++] = y + ny * off;
+      pos[k++] = z + nz * off;
+    }
+    const thm = S.curl * Math.pow((i + 0.5) / SEG_U, cp);
+    y += Math.cos(thm) * (P.L / SEG_U);
+    z += Math.sin(thm) * (P.L / SEG_U);
+  }
+  return pos;
+}
+// Closed shape is the base geometry; open shape is a morph target, so petals can curl as they open.
+function petalGeometry(P, closed, open) {
+  const g = new THREE.BufferGeometry();
+  const uv = [], idx = [];
+  for (let i = 0; i <= SEG_U; i++) for (let j = 0; j <= SEG_V; j++) uv.push(j / SEG_V, i / SEG_U);
+  for (let i = 0; i < SEG_U; i++) for (let j = 0; j < SEG_V; j++) {
+    const a = i * (SEG_V + 1) + j, b = a + SEG_V + 1;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  g.setIndex(idx);
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('position', new THREE.BufferAttribute(shapePetal(P, closed), 3));
+  g.computeVertexNormals();
+  const g2 = new THREE.BufferGeometry();
+  g2.setIndex(idx);
+  g2.setAttribute('position', new THREE.BufferAttribute(shapePetal(P, open), 3));
+  g2.computeVertexNormals();
+  g.morphAttributes.position = [g2.attributes.position];
+  g.morphAttributes.normal = [g2.attributes.normal];
+  return g;
+}
+
+const stemMat = new THREE.MeshStandardMaterial({ color: '#6f9a4e', roughness: 0.5 });
+const deepGreenMat = new THREE.MeshStandardMaterial({ color: '#5e8a44', roughness: 0.55 });
+
+// ---------- Textures for each flower ----------
+const TEX = {
+  irisFall: paintPetal({
+    seed: 11, veins: 34, veinColor: '#5b3f9a', veinAlpha: 0.32, veinReach: 0.2,
+    stops: [[0, '#e7e0b4'], [0.18, '#d6c8ec'], [0.45, '#9f7fd6'], [0.8, '#9474cf'], [1, '#ab92de']],
+    edge: 'rgba(214, 200, 242, 0.75)',
+    signal(g, W, H, r) {
+      const rg = g.createRadialGradient(W / 2, H * 0.86, 4, W / 2, H * 0.78, W * 0.6);
+      rg.addColorStop(0, 'rgba(255,253,246,0.95)'); rg.addColorStop(0.55, 'rgba(246,240,252,0.55)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = rg; g.fillRect(0, H * 0.3, W, H * 0.7);
+    },
+    after(g, W, H, r) { // the fuzzy yellow beard
+      for (let i = 0; i < 700; i++) {
+        const y = H - Math.pow(r(), 0.8) * H * 0.42;
+        const spread = 6 + (H - y) * 0.035;
+        const x = W / 2 + (r() - 0.5) * spread * 2;
+        g.strokeStyle = r() < 0.5 ? '#f0a92c' : '#f8d264';
+        g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 5, y - 5 - r() * 7); g.stroke();
+      }
+    },
+  }),
+  irisStandard: paintPetal({
+    seed: 12, veins: 30, veinColor: '#7259b0', veinAlpha: 0.18,
+    stops: [[0, '#e6dfb6'], [0.15, '#d2c3ee'], [0.5, '#b39ae6'], [1, '#c2aeec']],
+    edge: 'rgba(232, 224, 250, 0.8)',
+  }),
+  irisStyle: paintPetal({
+    seed: 13, veins: 10, veinColor: '#8a74c4', veinAlpha: 0.2,
+    stops: [[0, '#ece6c9'], [0.4, '#ddd3f3'], [1, '#cdbff0']], edge: 'rgba(246,242,255,0.8)',
+  }),
+  spathe: paintPetal({
+    seed: 14, veins: 16, veinColor: '#3f6a2c', veinAlpha: 0.25,
+    stops: [[0, '#5d8c41'], [0.6, '#79a457'], [1, '#c2b98a']], edge: 'rgba(200,210,150,0.5)',
+  }),
+  peony: paintPetal({
+    seed: 21, veins: 26, veinColor: '#cf5f80', veinAlpha: 0.16,
+    stops: [[0, '#d95f81'], [0.3, '#ec8fa9'], [0.7, '#f4b6c6'], [1, '#f9d2dc']], edge: 'rgba(252, 230, 235, 0.7)',
+  }),
+  peonyInner: paintPetal({
+    seed: 22, veins: 18, veinColor: '#cf5f80', veinAlpha: 0.14,
+    stops: [[0, '#e47c99'], [0.5, '#f1a8bb'], [1, '#f8cbd6']], edge: 'rgba(253, 236, 240, 0.7)',
+  }),
+  sepal: paintPetal({
+    seed: 23, veins: 10, veinColor: '#3e6a2f', veinAlpha: 0.25,
+    stops: [[0, '#4f7d3c'], [1, '#7aa45a']], edge: 'rgba(150, 120, 90, 0.35)',
+  }),
+  camellia: paintPetal({
+    seed: 31, veins: 22, veinColor: '#a72a45', veinAlpha: 0.2,
+    stops: [[0, '#c73a52'], [0.4, '#dc5868'], [1, '#ea7d86']], edge: 'rgba(245, 160, 168, 0.5)',
+  }),
+};
+const MAT = {
+  irisFall: petalMaterial(TEX.irisFall, '#e8dcff'),
+  irisStandard: petalMaterial(TEX.irisStandard, '#efe8ff'),
+  irisStyle: petalMaterial(TEX.irisStyle, '#f6f2ff'),
+  spathe: petalMaterial(TEX.spathe, '#d8e6c0'),
+  peony: petalMaterial(TEX.peony, '#ffe3ea'),
+  peonyInner: petalMaterial(TEX.peonyInner, '#ffe8ee'),
+  sepal: petalMaterial(TEX.sepal, '#cfe0b8'),
+  camellia: petalMaterial(TEX.camellia, '#ffc7cf'),
+};
+MAT.spathe.emissiveIntensity = MAT.sepal.emissiveIntensity = 0.05;
+
+// ---------- Flower recipes ----------
+// Each ring: how many petals, where they sit, their shape (P), closed and open pose, and when in the bloom they move.
+const FLOWERS = {
+  peony: {
+    num: '01', han: '牡丹', latin: 'Peony · <i>Paeonia lactiflora</i>', lang: '富贵 · 圆满', langEn: 'prosperity · fullness',
+    lift: -0.35, scale: 1.25,
+    rings: [
+      { n: 5, r: 0.24, y: -0.04, mat: 'sepal', P: { L: 0.62, W: 0.3, m: 0.55, base: 0.3, n: 1.7 },
+        closed: { tilt: 0.55, curl: -0.4, cup: 0.6, ruffle: 0.02, freq: 2 }, open: { tilt: 1.55, curl: 0.5, cup: 0.4, ruffle: 0.04, freq: 2 }, from: 0, to: 0.5 },
+      { n: 7, r: 0.27, y: 0, mat: 'peony', P: { L: 1.2, W: 0.66, m: 0.64, base: 0.28, n: 2.6 },
+        closed: { tilt: 0.36, curl: -1.9, curlPow: 1.15, cup: 0.38, ruffle: 0.01, freq: 3 }, open: { tilt: 1.0, curl: -0.55, cup: 0.7, ruffle: 0.1, freq: 3 }, from: 0.02, to: 0.7 },
+      { n: 8, r: 0.22, y: 0.05, mat: 'peony', P: { L: 1.08, W: 0.58, m: 0.64, base: 0.28, n: 2.6 },
+        closed: { tilt: 0.28, curl: -2.0, curlPow: 1.15, cup: 0.4, ruffle: 0.01, freq: 3 }, open: { tilt: 0.72, curl: -0.75, cup: 0.8, ruffle: 0.11, freq: 3.2 }, from: 0.1, to: 0.8 },
+      { n: 9, r: 0.16, y: 0.1, grow: 0.7, mat: 'peonyInner', P: { L: 0.98, W: 0.5, m: 0.64, base: 0.3, n: 2.6 },
+        closed: { tilt: 0.16, curl: -1.95, curlPow: 1.2, cup: 0.5, ruffle: 0.01, freq: 3 }, open: { tilt: 0.46, curl: -1.0, cup: 0.9, ruffle: 0.12, freq: 3.4 }, from: 0.2, to: 0.9 },
+      { n: 10, r: 0.1, y: 0.14, grow: 0.6, mat: 'peonyInner', P: { L: 0.86, W: 0.42, m: 0.62, base: 0.32, n: 2.4 },
+        closed: { tilt: 0.1, curl: -2.0, curlPow: 1.2, cup: 1.0, ruffle: 0.01, freq: 3 }, open: { tilt: 0.26, curl: -1.25, cup: 0.95, ruffle: 0.13, freq: 3.6 }, from: 0.3, to: 1 },
+      { n: 12, r: 0.05, y: 0.18, grow: 0.5, mat: 'peonyInner', P: { L: 0.72, W: 0.34, m: 0.6, base: 0.35, n: 2.2 },
+        closed: { tilt: 0.05, curl: -2.0, curlPow: 1.2, cup: 1.0, ruffle: 0.01, freq: 3 }, open: { tilt: 0.1, curl: -1.5, cup: 1.0, ruffle: 0.14, freq: 3.8 }, from: 0.4, to: 1 },
+    ],
+    stamens: { count: 36, rMin: 0.02, rMax: 0.07, y: 0.16, len: [0.08, 0.2], tilt: [0.1, 0.5], from: 0.5, filament: '#f3d98b', anther: '#e9b02f' },
+  },
+  iris: {
+    num: '02', han: '鸢尾', latin: 'Iris · <i>Iris germanica</i>', lang: '希望 · 信念', langEn: 'hope · faith',
+    lift: -0.25, scale: 1,
+    rings: [
+      // falls: the three petals that drop down, with the yellow beard
+      { n: 3, r: 0.1, y: 0, a0: Math.PI / 3, mat: 'irisFall', P: { L: 2.05, W: 0.72, m: 0.64, base: 0.12, n: 2.2 },
+        closed: { tilt: 0.02, curl: 0.04, cup: 0.9, ruffle: 0.02, freq: 3 }, open: { tilt: 0.78, curl: 2.5, curlPow: 1.3, cup: 0.1, ruffle: 0.2, freq: 3.2 }, from: 0, to: 0.85 },
+      // style arms: small petals that arch over each fall
+      { n: 3, r: 0.05, y: 0.12, a0: Math.PI / 3, mat: 'irisStyle', P: { L: 0.85, W: 0.18, m: 0.72, base: 0.4, n: 2 },
+        closed: { tilt: 0, curl: 0, cup: 0.6, ruffle: 0.01, freq: 2 }, open: { tilt: 0.95, curl: 0.55, cup: 0.5, ruffle: 0.06, freq: 4 }, from: 0.25, to: 0.9 },
+      // standards: the three petals that stand up and arch together
+      { n: 3, r: 0.08, y: 0.06, a0: 0, mat: 'irisStandard', P: { L: 1.8, W: 0.64, m: 0.6, base: 0.1, n: 2 },
+        closed: { tilt: -0.03, curl: 0, cup: 0.9, ruffle: 0.02, freq: 3 }, open: { tilt: 0.4, curl: -1.3, curlPow: 1.8, cup: 0.42, ruffle: 0.24, freq: 3.6 }, from: 0.2, to: 1 },
+    ],
+    build(group) {
+      const ovary = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.075, 0.36, 20), deepGreenMat);
+      ovary.position.y = -0.2;
+      ovary.castShadow = true;
+      group.add(ovary);
+      const spatheGeo = petalGeometry({ L: 0.6, W: 0.2, m: 0.5, base: 0.8, n: 1.4, seed: 2 },
+        { curl: 0.1, cup: 0.9, ruffle: 0, freq: 1 }, { curl: 0.1, cup: 0.9, ruffle: 0, freq: 1 });
+      [0.4, Math.PI + 0.2].forEach((a) => {
+        const h = new THREE.Group(); h.rotation.y = a;
+        const m = new THREE.Mesh(spatheGeo, MAT.spathe);
+        m.position.set(0, -0.5, 0.08); m.rotation.x = 0.1;
+        h.add(m); group.add(h);
+      });
+    },
+  },
+  camellia: {
+    num: '03', han: '山茶', latin: 'Camellia · <i>Camellia japonica</i>', lang: '理想的爱 · 谦逊', langEn: 'ideal love · modesty',
+    lift: -0.05, scale: 1.3,
+    rings: [
+      { n: 5, r: 0.2, y: -0.04, mat: 'sepal', P: { L: 0.42, W: 0.26, m: 0.5, base: 0.4, n: 2 },
+        closed: { tilt: 0.5, curl: -0.5, cup: 0.6, ruffle: 0, freq: 1 }, open: { tilt: 1.2, curl: 0, cup: 0.5, ruffle: 0, freq: 1 }, from: 0, to: 0.5 },
+      { n: 6, r: 0.2, y: 0, mat: 'camellia', P: { L: 1.02, W: 0.62, m: 0.58, base: 0.34, n: 2.4 },
+        closed: { tilt: 0.0, curl: -0.6, cup: 0.9, ruffle: 0.01, freq: 2 }, open: { tilt: 1.32, curl: 0.12, cup: 0.38, ruffle: 0.05, freq: 2 }, from: 0, to: 0.7 },
+      { n: 6, r: 0.16, y: 0.04, mat: 'camellia', P: { L: 0.94, W: 0.56, m: 0.58, base: 0.34, n: 2.4 },
+        closed: { tilt: -0.08, curl: -0.7, cup: 0.95, ruffle: 0.01, freq: 2 }, open: { tilt: 1.04, curl: 0, cup: 0.45, ruffle: 0.05, freq: 2 }, from: 0.1, to: 0.8 },
+      { n: 7, r: 0.12, y: 0.08, mat: 'camellia', P: { L: 0.8, W: 0.48, m: 0.58, base: 0.34, n: 2.4 },
+        closed: { tilt: -0.15, curl: -0.8, cup: 1.0, ruffle: 0.01, freq: 2 }, open: { tilt: 0.76, curl: -0.1, cup: 0.55, ruffle: 0.05, freq: 2 }, from: 0.2, to: 0.9 },
+      { n: 7, r: 0.09, y: 0.12, mat: 'camellia', P: { L: 0.62, W: 0.4, m: 0.58, base: 0.36, n: 2.2 },
+        closed: { tilt: -0.22, curl: -0.85, cup: 1.0, ruffle: 0.01, freq: 2 }, open: { tilt: 0.46, curl: -0.25, cup: 0.6, ruffle: 0.05, freq: 2 }, from: 0.3, to: 1 },
+    ],
+    stamens: { count: 80, rMin: 0.015, rMax: 0.085, y: 0.12, len: [0.16, 0.42], tilt: [0.04, 0.32], from: 0.45, filament: '#f6ecc6', anther: '#f0b62c' },
+  },
+};
+
+function makeStamens(cfg, group) {
+  const fg = new THREE.CylinderGeometry(0.0045, 0.006, 1, 5);
+  fg.translate(0, 0.5, 0);
+  const ag = new THREE.SphereGeometry(0.016, 8, 6);
+  ag.scale(1, 1.5, 1);
+  const fil = new THREE.InstancedMesh(fg, new THREE.MeshStandardMaterial({ color: cfg.filament, roughness: 0.6 }), cfg.count);
+  const ant = new THREE.InstancedMesh(ag, new THREE.MeshStandardMaterial({ color: cfg.anther, roughness: 0.5, emissive: cfg.anther, emissiveIntensity: 0.15 }), cfg.count);
+  group.add(fil, ant);
+  const data = Array.from({ length: cfg.count }, (_, i) => {
+    const t = Math.sqrt(R());
+    return { a: i * 2.39996, r: lerp(cfg.rMin, cfg.rMax, t), len: rand(0.85, 1.1) * (0.8 + 0.4 * t), lean: t };
+  });
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  return (b) => {
+    const k = ease(clamp01((b - cfg.from) / (1 - cfg.from)));
+    for (let i = 0; i < cfg.count; i++) {
+      const d = data[i];
+      const len = lerp(cfg.len[0], cfg.len[1], k) * d.len;
+      const tilt = lerp(cfg.tilt[0], cfg.tilt[1], k) * (0.4 + d.lean);
+      e.set(tilt, d.a, 0, 'YXZ'); q.setFromEuler(e);
+      p.set(Math.sin(d.a) * d.r, cfg.y, Math.cos(d.a) * d.r);
+      fil.setMatrixAt(i, m.compose(p, q, s.set(1, len, 1)));
+      p.x += Math.sin(d.a) * Math.sin(tilt) * len; p.y += Math.cos(tilt) * len; p.z += Math.cos(d.a) * Math.sin(tilt) * len;
+      ant.setMatrixAt(i, m.compose(p, q, s.set(1, 1, 1)));
+    }
+    fil.instanceMatrix.needsUpdate = true;
+    ant.instanceMatrix.needsUpdate = true;
+  };
+}
+
+function buildFlower(spec) {
+  const group = new THREE.Group();
+  const rings = spec.rings.map((cfg, ri) => {
+    const variants = [0, 1, 2].map((v) => petalGeometry({ ...cfg.P, seed: ri * 3.1 + v * 1.7 }, cfg.closed, cfg.open));
+    const petals = [];
+    const a0 = cfg.a0 ?? (ri % 2) * (Math.PI / cfg.n) + rand(-0.15, 0.15);
+    for (let k = 0; k < cfg.n; k++) {
+      const holder = new THREE.Group();
+      holder.rotation.y = a0 + (k / cfg.n) * Math.PI * 2 + (cfg.a0 === undefined ? rand(-0.08, 0.08) : 0);
+      const pivot = new THREE.Group();
+      const alt = k % 2;
+      pivot.position.set(0, cfg.y, cfg.r + alt * 0.02);
+      const mesh = new THREE.Mesh(variants[k % 3], MAT[cfg.mat]);
+      mesh.rotation.z = cfg.a0 === undefined ? rand(-0.07, 0.07) : 0;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.morphTargetInfluences = [0];
+      pivot.add(mesh);
+      holder.add(pivot);
+      group.add(holder);
+      petals.push({ pivot, mesh, alt, size: cfg.a0 === undefined ? rand(0.94, 1.06) : 1, jitter: cfg.a0 === undefined ? rand(-0.06, 0.06) : 0, phase: rand(0, 6.3) });
+    }
+    return { cfg, petals };
+  });
+  const stamens = spec.stamens ? makeStamens(spec.stamens, group) : null;
+  if (spec.build) spec.build(group);
+  const receptacle = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), deepGreenMat);
+  receptacle.scale.set(1, 0.6, 1);
+  receptacle.position.y = 0.04;
+  group.add(receptacle);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 7, 14), stemMat);
+  stem.position.y = -3.5;
+  group.add(stem);
+
+  return {
+    group, spec,
+    update(b, t, flutter) {
+      for (const { cfg, petals } of rings) {
+        const p = ease(clamp01((b - cfg.from) / (cfg.to - cfg.from)));
+        for (const pt of petals) {
+          const breathe = calm ? 0 : Math.sin(t * 1.1 + pt.phase) * 0.01;
+          const shiver = flutter * Math.sin(t * 9 + pt.phase * 3) * 0.05;
+          pt.pivot.rotation.x = lerp(cfg.closed.tilt, cfg.open.tilt, p) + pt.jitter * (0.3 + 0.7 * p) + pt.alt * 0.02 + breathe + shiver;
+          pt.pivot.scale.setScalar(pt.size * lerp(cfg.grow ?? 0.94, 1.02, p));
+          pt.mesh.morphTargetInfluences[0] = p;
+        }
+      }
+      if (stamens) stamens(b);
+    },
+  };
+}
+
+// The flower hangs from a pivot low on the stem, so swaying looks like a stem bending.
+const swayPivot = new THREE.Group();
+swayPivot.position.y = -3;
+scene.add(swayPivot);
+const turn = new THREE.Group();
+turn.position.y = 3;
+swayPivot.add(turn);
+
+const flowers = {};
+for (const name of Object.keys(FLOWERS)) {
+  const f = buildFlower(FLOWERS[name]);
+  f.group.visible = false;
+  turn.add(f.group);
+  flowers[name] = f;
+}
+
+// ---------- State ----------
+let current = 'iris';
+let incoming = null, swapT = 0;
+let mode = 'demo'; // demo | camera | manual
+let bloom = 0.3, target = 0.3;
+let playStart = -1, playFrom = 0;
+let yaw = 0, yawDrag = 0;
+let sway = 0, swayVel = 0, flutter = 0;
+let pinchCal = loadCal();
+let swapHands = false;
+
+function loadCal() {
+  try { const c = JSON.parse(localStorage.getItem('flora-cal')); if (c && c.open > c.closed) return c; } catch (e) { /* storage unavailable */ }
+  return { ...DEFAULT_CAL };
+}
+function saveCal(c) { try { localStorage.setItem('flora-cal', JSON.stringify(c)); } catch (e) { /* storage unavailable */ } }
+
+function placeFlower(name) {
+  const f = flowers[name];
+  f.group.position.y = f.spec.lift;
+  f.group.scale.setScalar(f.spec.scale);
+}
+placeFlower(current);
+flowers[current].group.visible = true;
+
+// ---------- UI: flower info ----------
+const navBtns = [...document.querySelectorAll('.nav button')];
+function showInfo(name) {
+  const s = FLOWERS[name];
+  $('nNum').textContent = s.num;
+  $('nHan').textContent = s.han;
+  $('nLatin').innerHTML = s.latin;
+  $('nLang').innerHTML = `${s.lang}<small>${s.langEn}</small>`;
+  $('eyebrow').textContent = `Bloom / ${s.num}`;
+  navBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.flower === name)));
+}
+navBtns.forEach((b) => b.addEventListener('click', () => {
+  const name = b.dataset.flower;
+  if (name === current || name === incoming) return;
+  incoming = name; swapT = 0;
+  showInfo(name);
+}));
+showInfo(current);
+
+const HEADLINES = [[0, 'Still a', 'bud.'], [0.15, 'Slowly', 'waking.'], [0.5, 'Almost', 'open.'], [0.85, 'In full', 'bloom.']];
+let shownHead = -1;
+function updateHeadline(b) {
+  let k = 0;
+  HEADLINES.forEach(([at], i) => { if (b >= at) k = i; });
+  if (k === shownHead) return;
+  shownHead = k;
+  $('hRoman').textContent = HEADLINES[k][1];
+  $('hItalic').textContent = HEADLINES[k][2];
+}
+
+// ---------- Drag to turn the flower ----------
+const sceneEl = $('scene');
+let dragX = null;
+sceneEl.addEventListener('pointerdown', (e) => { dragX = e.clientX; sceneEl.setPointerCapture(e.pointerId); });
+sceneEl.addEventListener('pointermove', (e) => { if (dragX === null) return; yawDrag += (e.clientX - dragX) * 0.008; dragX = e.clientX; });
+sceneEl.addEventListener('pointerup', () => { dragX = null; });
+sceneEl.addEventListener('pointercancel', () => { dragX = null; });
+
+// ---------- Hand tracking ----------
+const video = $('video');
+const overlay = $('overlay');
+const octx = overlay.getContext('2d');
+let landmarker = null, loading = null, stream = null, lastVideoTime = -1;
+let lastControlSeen = 0;
+let pinchNow = null;
+let palmPrevX = null, palmPrevT = 0;
+let calib = null; // { step, t0, samples, closed }
+
+function loadLandmarker() {
+  if (!loading) {
+    loading = (async () => {
+      const { FilesetResolver, HandLandmarker } = await import(`${MP_BASE}/vision_bundle.mjs`);
+      const fileset = await FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+      const opts = (delegate) => ({
+        baseOptions: { modelAssetPath: HAND_MODEL, delegate },
+        runningMode: 'VIDEO', numHands: 2,
+        minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+      });
+      try { return await HandLandmarker.createFromOptions(fileset, opts('GPU')); }
+      catch (err) { console.warn('GPU hand tracking unavailable, using CPU instead.', err); return HandLandmarker.createFromOptions(fileset, opts('CPU')); }
+    })();
+    loading.catch(() => { loading = null; });
+  }
+  return loading;
+}
+
+const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+function pts(h) { return h.world && h.world.length === 21 ? h.world : h.lm.map((p) => ({ x: p.x * video.videoWidth, y: p.y * video.videoHeight, z: 0 })); }
+function pinchRatio(h) { const p = pts(h); return dist3(p[4], p[8]) / Math.max(dist3(p[0], p[9]), 1e-6); }
+function palmOpen(h) {
+  const p = pts(h);
+  let s = 0;
+  for (const [k, t] of [[5, 8], [9, 12], [13, 16], [17, 20]]) s += dist3(p[0], p[t]) / Math.max(dist3(p[0], p[k]), 1e-6);
+  return s / 4 > 1.5;
+}
+
+// Where a landmark lands on the mirrored, cover-cropped video
+function toScreen(p, cw, ch) {
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  const s = Math.max(cw / vw, ch / vh);
+  return [cw - ((p.x * vw - vw / 2) * s + cw / 2), (p.y * vh - vh / 2) * s + ch / 2];
+}
+const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
+
+function sizeOverlay() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = overlay.clientWidth, h = overlay.clientHeight;
+  if (overlay.width !== Math.round(w * dpr) || overlay.height !== Math.round(h * dpr)) {
+    overlay.width = Math.round(w * dpr); overlay.height = Math.round(h * dpr);
+  }
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [w, h];
+}
+function badge(x, y, label, color) {
+  octx.beginPath(); octx.arc(x, y, 13, 0, Math.PI * 2);
+  octx.fillStyle = 'rgba(28,23,25,0.9)'; octx.fill();
+  octx.lineWidth = 2; octx.strokeStyle = color; octx.stroke();
+  octx.fillStyle = '#fff'; octx.font = '600 10px "Hanken Grotesk", sans-serif';
+  octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  octx.fillText(label, x, y + 0.5);
+}
+function drawHands(control, other) {
+  const [w, h] = sizeOverlay();
+  octx.clearRect(0, 0, w, h);
+  for (const hand of [control, other]) {
+    if (!hand) continue;
+    const P = hand.lm.map((p) => toScreen(p, w, h));
+    octx.lineCap = 'round';
+    octx.lineWidth = 3;
+    octx.strokeStyle = '#63d471';
+    octx.beginPath();
+    for (const [a, b] of BONES) { octx.moveTo(...P[a]); octx.lineTo(...P[b]); }
+    octx.stroke();
+    for (const q of P) {
+      octx.beginPath(); octx.arc(q[0], q[1], 3.6, 0, Math.PI * 2);
+      octx.fillStyle = '#e3553f'; octx.fill();
+      octx.lineWidth = 1.2; octx.strokeStyle = '#63d471'; octx.stroke();
+    }
+    if (hand === control) {
+      octx.lineWidth = 3; octx.strokeStyle = '#f2c94c';
+      octx.beginPath(); octx.moveTo(...P[4]); octx.lineTo(...P[8]); octx.stroke();
+      for (const i of [4, 8]) {
+        octx.beginPath(); octx.arc(P[i][0], P[i][1], 9, 0, Math.PI * 2);
+        octx.fillStyle = 'rgba(242,201,76,0.25)'; octx.fill(); octx.stroke();
+      }
+      badge(P[0][0], P[0][1] + 26, '01', '#f2c94c');
+    } else {
+      const c = [0, 5, 9, 13, 17].reduce((acc, i) => [acc[0] + P[i][0] / 5, acc[1] + P[i][1] / 5], [0, 0]);
+      const rad = Math.hypot(P[0][0] - P[9][0], P[0][1] - P[9][1]) * 1.55;
+      octx.lineWidth = 2.5; octx.strokeStyle = '#4fb3c8';
+      octx.beginPath(); octx.arc(c[0], c[1], rad, 0, Math.PI * 2); octx.stroke();
+      badge(P[0][0], P[0][1] + 26, '02', '#4fb3c8');
+    }
+  }
+}
+
+function setText(id, text) { const el = $(id); if (el.textContent !== text) el.textContent = text; }
+
+function trackHands(now, dt) {
+  if (!landmarker || video.readyState < 2 || video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  let res;
+  try { res = landmarker.detectForVideo(video, now); } catch (err) { console.warn(err); return; }
+  const hands = res.landmarks.map((lm, i) => ({ lm, world: res.worldLandmarks && res.worldLandmarks[i] }));
+  let control = null, other = null;
+  if (hands.length === 1) control = hands[0];
+  else if (hands.length >= 2) {
+    // The pinch hand is your right hand (left side of the raw image) unless you swap.
+    const aIsRight = hands[0].lm[0].x < hands[1].lm[0].x;
+    control = aIsRight !== swapHands ? hands[0] : hands[1];
+    other = control === hands[0] ? hands[1] : hands[0];
+  }
+  drawHands(control, other);
+
+  if (control) {
+    lastControlSeen = now;
+    pinchNow = pinchRatio(control);
+    const open = clamp01((pinchNow - pinchCal.closed) / (pinchCal.open - pinchCal.closed));
+    if (!calib && playStart < 0) target = open;
+    setText('pinchVal', `${Math.round(open * 100)}%`);
+    $('pinchBar').style.width = `${Math.round(open * 100)}%`;
+    setText('pinchNote', open > 0.85 ? 'wide open' : open < 0.1 ? 'pinched closed' : 'open/close reference');
+  } else {
+    pinchNow = null;
+  }
+
+  if (other) {
+    const isOpen = palmOpen(other);
+    const x = 1 - (other.lm[0].x + other.lm[9].x) / 2; // mirrored, 0..1 across the screen
+    if (palmPrevX !== null && now - palmPrevT < 1500) {
+      const gap = Math.max((now - palmPrevT) / 1000, 1e-3);
+      const vx = (x - palmPrevX) / gap; // screen widths per second
+      if (isOpen) swayVel += vx * 9 * gap; // waving pushes the flower like wind
+      flutter = Math.min(1, flutter + Math.abs(vx) * 1.6 * gap);
+    }
+    palmPrevX = x; palmPrevT = now;
+    setText('palmNote', isOpen ? 'Open palm recognized · wave it' : 'Hand found · open your palm to wave');
+  } else {
+    palmPrevX = null;
+    setText('palmNote', 'Not in view · hold up an open palm and wave');
+  }
+}
+
+// ---------- Calibration ----------
+const CAL_STEPS = [
+  { say: 'Pinch your thumb and index finger together', key: 'closed' },
+  { say: 'Now spread your thumb and index finger wide', key: 'open' },
+];
+const CAL_HOLD = 2600;
+function startCalibration() {
+  if (mode !== 'camera') { setCamCard('Turn on the camera first', 'Calibrating measures your own pinch, so the camera needs to be on.', false); return; }
+  calib = { step: 0, t0: performance.now(), samples: [], result: {} };
+  $('calib').hidden = false;
+  playStart = -1;
+}
+function runCalibration(now) {
+  if (!calib) return;
+  const step = CAL_STEPS[calib.step];
+  setText('calibStep', `Step ${calib.step + 1} of 2`);
+  const el = now - calib.t0;
+  if (pinchNow === null) {
+    setText('calibSay', 'Show your pinch hand to the camera');
+    calib.t0 = now; calib.samples = [];
+    $('calibBar').style.width = '0%';
+    return;
+  }
+  setText('calibSay', step.say);
+  if (el > 700) calib.samples.push(pinchNow);
+  $('calibBar').style.width = `${Math.min(100, (el / CAL_HOLD) * 100)}%`;
+  if (el < CAL_HOLD) return;
+  const sorted = calib.samples.slice().sort((a, b) => a - b);
+  calib.result[step.key] = sorted[Math.floor(sorted.length / 2)] ?? pinchNow;
+  if (calib.step === 0) { calib.step = 1; calib.t0 = now; calib.samples = []; return; }
+  const closed = calib.result.closed + 0.03, open = calib.result.open - 0.05;
+  if (open - closed < 0.2) {
+    setText('calibStep', 'Try again');
+    setText('calibSay', 'Those looked too similar. Pinch tightly, then spread wide.');
+    calib.step = 0; calib.t0 = now + 1500; calib.samples = [];
+    return;
+  }
+  pinchCal = { closed, open };
+  saveCal(pinchCal);
+  calib = null;
+  $('calib').hidden = true;
+  setText('status', 'Calibrated to your hand');
+}
+$('calibBtn').addEventListener('click', startCalibration);
+
+// ---------- Play bloom ----------
+$('playBtn').addEventListener('click', () => { playStart = performance.now(); playFrom = bloom; });
+function playTarget(now) {
+  const s = (now - playStart) / 1000;
+  if (s < 1) return lerp(playFrom, 0, ease(s));
+  if (s < 5) return ease((s - 1) / 4);
+  if (s > 6) { playStart = -1; if (mode === 'manual') $('bloomSlider').value = 100; }
+  return 1;
+}
+
+// ---------- Camera on/off, slider, panel ----------
+const camEl = $('cam'), camCard = $('camCard'), hud = $('hud'), swapBtn = $('swapBtn');
+const startBtn = $('startBtn'), gestureBtn = $('gestureBtn'), sliderWrap = $('sliderWrap'), slider = $('bloomSlider');
+
+function setCamCard(title, msg, isError) {
+  camCard.hidden = false;
+  hud.hidden = true; swapBtn.hidden = true;
+  $('camTitle').textContent = title;
+  $('camMsg').textContent = msg;
+  $('camMsg').classList.toggle('err', !!isError);
+  if (camEl.hidden) toggleCamPanel(true);
+}
+function stopCamera() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = null;
+  video.srcObject = null;
+  calib = null; $('calib').hidden = true;
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+}
+function enterManual() {
+  stopCamera();
+  mode = 'manual';
+  target = slider.value / 100;
+  sliderWrap.hidden = false;
+  gestureBtn.innerHTML = 'Turn on gestures <span aria-hidden="true">↗</span>';
+  setCamCard('Gestures are off', 'Drag the slider to open and close the flower, or turn the camera back on.', false);
+  startBtn.textContent = 'Start camera';
+  setText('status', 'Slider control');
+  $('status').classList.remove('on');
+}
+
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setCamCard('The camera isn’t available here', 'Open this page in Chrome or Edge, from an https:// address or as a file on your computer.', true);
+    return;
+  }
+  startBtn.disabled = true;
+  startBtn.textContent = 'Starting camera…';
+  const ready = loadLandmarker();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+  } catch (err) {
+    startBtn.disabled = false;
+    startBtn.textContent = 'Try the camera again';
+    const msg = err.name === 'NotAllowedError' || err.name === 'SecurityError'
+      ? 'The camera is blocked for this page. Click the camera icon in the address bar, choose Allow, then try again.'
+      : err.name === 'NotFoundError' || err.name === 'OverconstrainedError'
+        ? 'No camera was found. Plug one in and try again, or use the slider.'
+        : err.name === 'NotReadableError'
+          ? 'Another app is using the camera. Close it (for example a video call) and try again.'
+          : `The camera didn’t start (${err.name}). Try again, or use the slider.`;
+    setCamCard('Camera unavailable', msg, true);
+    return;
+  }
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) { /* muted video normally plays */ }
+  startBtn.textContent = 'Loading hand tracker…';
+  try { landmarker = await ready; } catch (err) {
+    console.error(err);
+    stopCamera();
+    startBtn.disabled = false;
+    startBtn.textContent = 'Try again';
+    setCamCard('The hand tracker didn’t load', 'Check your internet connection and try again.', true);
+    return;
+  }
+  startBtn.disabled = false;
+  mode = 'camera';
+  lastControlSeen = performance.now();
+  camCard.hidden = true;
+  hud.hidden = false; swapBtn.hidden = false;
+  sliderWrap.hidden = true;
+  gestureBtn.innerHTML = 'Turn off gestures <span aria-hidden="true">↗</span>';
+}
+
+startBtn.addEventListener('click', startCamera);
+$('manualBtn').addEventListener('click', enterManual);
+slider.addEventListener('input', () => { target = slider.value / 100; playStart = -1; });
+gestureBtn.addEventListener('click', () => { if (mode === 'camera') enterManual(); else startCamera(); });
+swapBtn.addEventListener('click', () => {
+  swapHands = !swapHands;
+  swapBtn.textContent = `Pinch hand: ${swapHands ? 'left' : 'right'}`;
+});
+function toggleCamPanel(show) {
+  camEl.hidden = !show;
+  $('camToggle').setAttribute('aria-pressed', String(show));
+  $('camToggle').setAttribute('aria-label', show ? 'Hide camera view' : 'Show camera view');
+}
+$('camToggle').addEventListener('click', () => toggleCamPanel(camEl.hidden));
+
+// ---------- Main loop ----------
+const clock = new THREE.Clock();
+let t = 0;
+function frame() {
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 0.1);
+  const now = performance.now();
+  t += dt;
+
+  if (mode === 'camera') {
+    trackHands(now, dt);
+    runCalibration(now);
+    const lost = now - lastControlSeen > 1000;
+    setText('status', calib ? 'Calibrating…' : playStart >= 0 ? 'Playing bloom' : lost ? 'Looking for your hand…' : 'Pinch hand recognized');
+    $('status').classList.toggle('on', !lost);
+    if (lost) { setText('pinchVal', '–'); setText('pinchNote', 'show your hand'); }
+  } else if (mode === 'demo' && playStart < 0) {
+    target = 0.5 - 0.5 * Math.cos(t * 0.5);
+  }
+  if (playStart >= 0) target = playTarget(now);
+
+  bloom = damp(bloom, target, mode === 'demo' && playStart < 0 ? 30 : 5, dt);
+
+  // Sway: a spring the second hand can push, plus a gentle breeze
+  swayVel += (-14 * sway - 2.6 * swayVel) * dt;
+  sway = Math.max(-0.4, Math.min(0.4, sway + swayVel * dt));
+  flutter = damp(flutter, 0, 2, dt);
+  const breeze = calm ? 0 : Math.sin(t * 0.7) * 0.012 + Math.sin(t * 1.9) * 0.004;
+  swayPivot.rotation.z = -(sway * 0.4) + breeze;
+  swayPivot.rotation.x = calm ? 0 : Math.sin(t * 0.5) * 0.008;
+
+  yaw = damp(yaw, yawDrag + (calm ? 0 : Math.sin(t * 0.25) * 0.18), 4, dt);
+  turn.rotation.y = yaw;
+
+  // Switching flowers: shrink the old one, grow the new one
+  if (incoming) {
+    swapT += Math.min(rawDt, 0.3);
+    const out = flowers[current], inn = flowers[incoming];
+    if (swapT < 0.35) {
+      out.group.scale.setScalar(out.spec.scale * (1 - ease(swapT / 0.35)) + 0.0001);
+    } else {
+      if (out.group.visible) { out.group.visible = false; placeFlower(incoming); inn.group.visible = true; }
+      const k = clamp01((swapT - 0.35) / 0.55);
+      inn.group.scale.setScalar(inn.spec.scale * (0.0001 + ease(k)));
+      if (k >= 1) { current = incoming; incoming = null; placeFlower(current); }
+    }
+  }
+  for (const name of Object.keys(flowers)) if (flowers[name].group.visible) flowers[name].update(bloom, t, flutter);
+
+  updateHeadline(bloom);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+window.flora = {
+  get mode() { return mode; }, get bloom() { return bloom; }, get pinch() { return pinchNow; },
+  get flower() { return current; }, get sway() { return sway; },
+};
+</script>
+</body>
+</html>

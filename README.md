@@ -2,6 +2,18 @@
 
 An interactive audio-visual drawing application. Draw with your mouse or touch to create art and music simultaneously!
 
+## Flora 🌸
+
+`flora.html` is a gesture-controlled flower studio based on an editorial "Form in motion" design. Choose a peony, iris or camellia. Pinch your thumb and index finger together to close the flower and spread them apart to open it. Hold your other hand open and wave it to make the flower sway in the wind.
+
+- **Calibrate** measures your own pinch (2 steps, about 5 seconds) so the full range of your fingers opens the flower all the way.
+- **Play bloom** plays the opening animation from bud to full bloom.
+- The camera button shows or hides the camera view, and **Turn off gestures** switches to a slider.
+- **Pinch hand** (on the camera view) switches which hand does the pinching.
+- Drag the flower to turn it.
+
+Open `flora.html` in Chrome or Edge, click **Start camera** and allow camera access. It needs an internet connection when it starts. Video stays on your computer.
+
 ## Palm Lotus 🪷
 
 `palm-lotus.html` is a separate app: a 3D lotus that opens when you open your hand and closes when you make a fist. It uses your webcam and Google's MediaPipe hand tracker, which runs inside the browser, so no video leaves your computer.
